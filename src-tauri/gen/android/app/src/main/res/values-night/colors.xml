@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ステータスバー・ナビゲーションバーの裏の色。App.css の変数 surface（ダーク）と揃える -->
+    <color name="system_bar_background">#FF1E222A</color>
+</resources>
