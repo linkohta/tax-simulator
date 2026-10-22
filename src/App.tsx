@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
 import { InputForm } from "./components/InputForm";
 import { ResultPanel } from "./components/ResultPanel";
 import { yen } from "./components/Fields";
 import { TaxInput, TaxResult, defaultInput } from "./types";
 import "./App.css";
-
-const FILTERS = [{ name: "税シミュレーション", extensions: ["json"] }];
 
 /** 狭い画面（スマホ）で表示するペイン。広い画面では両方を並べるので使わない */
 type MobileView = "input" | "result";
@@ -48,22 +45,20 @@ function App() {
     setTimeout(() => setMessage(null), 3000);
   };
 
+  // 保存先・読込元のダイアログは Rust 側で開く（Webview からパスを渡さない）
   const onSave = async () => {
-    const path = await save({ filters: FILTERS, defaultPath: "tax-scenario.json" });
-    if (!path) return;
     try {
-      await invoke("save_scenario", { path, input });
-      flash("保存しました");
+      const saved = await invoke<boolean>("save_scenario", { input });
+      if (saved) flash("保存しました");
     } catch (e) {
       flash(String(e));
     }
   };
 
   const onLoad = async () => {
-    const path = await open({ filters: FILTERS, multiple: false, directory: false });
-    if (!path) return;
     try {
-      const loaded = await invoke<TaxInput>("load_scenario", { path });
+      const loaded = await invoke<TaxInput | null>("load_scenario");
+      if (!loaded) return;
       setInputState(loaded);
       flash("読み込みました");
     } catch (e) {
