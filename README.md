@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run tauri dev
+npm run app:dev
 ```
 
 計算エンジンのテスト：
