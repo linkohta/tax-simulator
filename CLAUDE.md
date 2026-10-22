@@ -93,6 +93,13 @@ src-tauri/gen/android/  Android プロジェクト（手を加えているので
 - 警告は `warnings: Vec<String>` に日本語で追加する。panic で済ませない。
 - `cargo build` / `cargo test` で warning を出さない。
 
+### セキュリティ
+
+- Webview から受け取ったパスでファイルを読み書きしない。保存・読込はコマンドの中で `tauri_plugin_dialog` のダイアログを開き、ユーザーが選んだファイルだけを扱う（`save_scenario` / `load_scenario` を参照）。
+- `capabilities/default.json` には画面が実際に呼ぶ権限だけを入れる（現在は `core:default` のみ）。プラグインの権限を足す前に、Rust のコマンドで済ませられないか考える。
+- `tauri.conf.json` の CSP を `null` に戻さない。`'unsafe-inline'`・`'unsafe-eval'`・外部オリジンを足さない。CSP は本番ビルドにだけ効く（`npm run tauri dev` の dev サーバーには付かない）ので、変えたら `npm run tauri build -- --debug` で確かめる。
+- npm の依存を足す・上げるときは `npm audit` を、Rust の依存では `cargo audit` を通す。公開から日の浅い版は避ける。
+
 ### TypeScript / React
 
 - `types.ts` は `model.rs` と手作業で同期している。**Rust のモデルを変えたら、同じ変更で `types.ts`（型と `defaultInput`）も直す。**
