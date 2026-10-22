@@ -13,7 +13,7 @@
 ## コマンド
 
 ```bash
-npm run tauri dev                 # アプリ起動（Vite + Rust）
+npm run app:dev                   # アプリ起動（Vite + Rust）。npm run dev は Vite のみで計算できない
 cd src-tauri && cargo test --lib  # 計算エンジンのテスト
 npx tsc --noEmit                  # フロントの型チェック
 npm run build                     # フロントのビルド
