@@ -51,7 +51,8 @@ pub static FURUSATO_BANDS: &[FurusatoBand] = &[
     FurusatoBand { upper: i64::MAX, special_x1000: 44_055, filing_ratio: (33_693, 56_307) },
 ];
 /// 課税総所得金額−人的控除差調整額がマイナスの場合
-pub static FURUSATO_BAND_NEGATIVE: FurusatoBand = FurusatoBand { upper: 0, special_x1000: 90_000, filing_ratio: (0, 1) };
+pub static FURUSATO_BAND_NEGATIVE: FurusatoBand =
+    FurusatoBand { upper: 0, special_x1000: 90_000, filing_ratio: (0, 1) };
 /// 課税総所得がなく分離課税所得のみの場合（90% − 15.315%）
-pub static FURUSATO_BAND_SEPARATE: FurusatoBand = FurusatoBand { upper: 0, special_x1000: 74_685, filing_ratio: (15_315, 74_685) };
-
+pub static FURUSATO_BAND_SEPARATE: FurusatoBand =
+    FurusatoBand { upper: 0, special_x1000: 74_685, filing_ratio: (15_315, 74_685) };

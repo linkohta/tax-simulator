@@ -21,7 +21,13 @@ pub struct ForeignTaxCredit {
 ///
 /// 控除限度額は「税額 × 国外所得金額 ÷ 所得総額」。所得税、復興特別所得税、道府県民税、市町村民税の順に控除する。
 /// `base_tax` は配当控除・住宅借入金等特別控除を引いた後の所得税額、`total_income` は繰越控除前の所得の合計。
-pub fn credit(paid: i64, foreign_income: i64, total_income: i64, base_tax: i64, reconstruction: i64) -> ForeignTaxCredit {
+pub fn credit(
+    paid: i64,
+    foreign_income: i64,
+    total_income: i64,
+    base_tax: i64,
+    reconstruction: i64,
+) -> ForeignTaxCredit {
     let paid = paid.max(0);
     if paid == 0 || total_income <= 0 {
         return ForeignTaxCredit { unused: paid, ..Default::default() };
@@ -47,7 +53,12 @@ pub fn credit(paid: i64, foreign_income: i64, total_income: i64, base_tax: i64, 
 }
 
 /// 株式の入力から外国税額控除を計算する。配当を申告しない場合は控除できない
-pub fn for_stocks(st: &StockInput, total_income: i64, base_tax: i64, reconstruction: i64) -> (ForeignTaxCredit, Vec<String>) {
+pub fn for_stocks(
+    st: &StockInput,
+    total_income: i64,
+    base_tax: i64,
+    reconstruction: i64,
+) -> (ForeignTaxCredit, Vec<String>) {
     let paid = st.foreign_tax_paid.max(0);
     if paid == 0 {
         return (ForeignTaxCredit::default(), Vec::new());

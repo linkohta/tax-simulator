@@ -13,11 +13,7 @@ pub static BASIC_DEDUCTION_IT: &[(i64, i64)] = &[
     (25_000_000, 160_000),
 ];
 
-pub static BASIC_DEDUCTION_RT: &[(i64, i64)] = &[
-    (24_000_000, 430_000),
-    (24_500_000, 290_000),
-    (25_000_000, 150_000),
-];
+pub static BASIC_DEDUCTION_RT: &[(i64, i64)] = &[(24_000_000, 430_000), (24_500_000, 290_000), (25_000_000, 150_000)];
 
 // ───────────── 配偶者・扶養 ─────────────
 
@@ -123,7 +119,6 @@ pub const PERSONAL_DIFF_BASIC: i64 = 50_000;
 /// 所得税の基礎控除額のうちこの額を超える部分を加算する（地方税法37条の2第11項等）
 pub const BASIC_DEDUCTION_EXCESS_BASE: i64 = 480_000;
 
-
 // ───────────── 年齢・所得の区分 ─────────────
 
 /// 配偶者控除・配偶者特別控除の、納税者の合計所得金額の区分の上限（これを超えると控除なし）
@@ -138,4 +133,3 @@ pub const YOUNG_DEPENDENT_AGE_UNTIL: u32 = 23;
 pub const ELDERLY_AGE_FROM: u32 = 70;
 /// 住民税の非課税判定での未成年者（18歳未満）
 pub const RT_MINOR_AGE_UNTIL: u32 = 18;
-

@@ -29,18 +29,12 @@ fn floor_to(x: i64, unit: i64) -> i64 {
 
 /// 所得税の速算表
 pub fn progressive_income_tax(taxable: i64) -> i64 {
-    let row = INCOME_TAX_BRACKETS
-        .iter()
-        .find(|b| taxable <= b.upper)
-        .unwrap_or(INCOME_TAX_BRACKETS.last().unwrap());
+    let row = INCOME_TAX_BRACKETS.iter().find(|b| taxable <= b.upper).unwrap_or(INCOME_TAX_BRACKETS.last().unwrap());
     (taxable * row.rate_pct / 100 - row.deduction).max(0)
 }
 
 fn marginal_bracket(taxable: i64) -> &'static Bracket {
-    INCOME_TAX_BRACKETS
-        .iter()
-        .find(|b| taxable <= b.upper)
-        .unwrap_or(INCOME_TAX_BRACKETS.last().unwrap())
+    INCOME_TAX_BRACKETS.iter().find(|b| taxable <= b.upper).unwrap_or(INCOME_TAX_BRACKETS.last().unwrap())
 }
 
 /// 計算の途中結果（ふるさと納税上限の探索で何度も呼ぶため、入力と寄附額を分離）
@@ -91,7 +85,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
 
     // ── 確定申告の要否とワンストップ特例 ──
     let furusato_count = input.donations.furusato.iter().filter(|e| e.amount > 0).count();
-    let other_donations = input.donations.other_income_tax_only.max(0) + input.donations.other_resident_designated.max(0);
+    let other_donations =
+        input.donations.other_income_tax_only.max(0) + input.donations.other_resident_designated.max(0);
     let medical_claimed = deductions::medical(&input.medical, total_base_it) > 0;
     let mut filing_reasons: Vec<&str> = Vec::new();
     if medical_claimed {
@@ -142,7 +137,10 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
                 label: "生命保険料控除".into(),
                 amount: deductions::life_insurance(&input.insurance, kind, personal_it.has_dependent_under_23),
             },
-            DeductionItem { label: "地震保険料控除".into(), amount: deductions::earthquake_insurance(&input.insurance, kind) },
+            DeductionItem {
+                label: "地震保険料控除".into(),
+                amount: deductions::earthquake_insurance(&input.insurance, kind),
+            },
             DeductionItem {
                 label: if input.medical.mode == MedicalMode::SelfMedication {
                     "医療費控除（セルフメディケーション）".into()
@@ -205,7 +203,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let leftover_rt = (total_ded_rt - ordinary_rt).max(0);
     let taxable_sep_rt = floor_to(separate_income - leftover_rt, TAXABLE_INCOME_UNIT);
     // [市町村, 道府県]
-    let rate = |i: usize| taxable_ord_rt * RESIDENT_RATE_PCT[i] / 100 + taxable_sep_rt * STOCK_SEPARATE_RT_RATE_PCT[i] / 100;
+    let rate =
+        |i: usize| taxable_ord_rt * RESIDENT_RATE_PCT[i] / 100 + taxable_sep_rt * STOCK_SEPARATE_RT_RATE_PCT[i] / 100;
     let mut levy = [rate(0), rate(1)];
     let levy_before = levy[0] + levy[1];
     let mut credits_rt = Vec::new();
@@ -221,7 +220,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     // 調整控除
     let personal_diff = personal_rt.personal_diff;
     // 所得税の基礎控除額のうち48万円を超える部分（ふるさと納税・住宅ローン控除の調整用）
-    let basic_excess = (deductions::basic_deduction(total_income_it, Kind::IncomeTax) - BASIC_DEDUCTION_EXCESS_BASE).max(0);
+    let basic_excess =
+        (deductions::basic_deduction(total_income_it, Kind::IncomeTax) - BASIC_DEDUCTION_EXCESS_BASE).max(0);
     if let Some(amounts) = adjustment_credit(taxable_ord_rt, personal_diff, total_income_rt) {
         apply(&mut levy, "調整控除", amounts, &mut credits_rt);
     }
@@ -247,8 +247,9 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let furusato = furusato_total.max(0);
     let designated = input.donations.other_resident_designated.max(0);
     if furusato + designated > 0 {
-        let basic_base =
-            ((furusato + designated).min(total_base_rt * DONATION_RT_INCOME_LIMIT_PCT / 100) - DONATION_SELF_BURDEN).max(0);
+        let basic_base = ((furusato + designated).min(total_base_rt * DONATION_RT_INCOME_LIMIT_PCT / 100)
+            - DONATION_SELF_BURDEN)
+            .max(0);
         let basic = [basic_base * RESIDENT_RATE_PCT[0] / 100, basic_base * RESIDENT_RATE_PCT[1] / 100];
         apply(&mut levy, "寄附金税額控除（基本分）", basic, &mut credits_rt);
 
@@ -272,10 +273,11 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     // 非課税判定（標準：1級地）
     let rt_count = personal_rt.household_count;
     let rt_has_deps = personal_rt.has_dependents_for_exemption;
-    let protected = (matches!(fam.self_disability, Disability::General | Disability::Special | Disability::SpecialCohabiting)
-        || fam.widow_status != WidowStatus::None
-        || input.age < RT_MINOR_AGE_UNTIL)
-        && total_income_rt <= RT_PROTECTED_INCOME_LIMIT;
+    let protected =
+        (matches!(fam.self_disability, Disability::General | Disability::Special | Disability::SpecialCohabiting)
+            || fam.widow_status != WidowStatus::None
+            || input.age < RT_MINOR_AGE_UNTIL)
+            && total_income_rt <= RT_PROTECTED_INCOME_LIMIT;
     let per_capita_exempt = protected || total_income_rt <= per_capita_exempt_limit(rt_count, rt_has_deps);
     let levy_exempt = per_capita_exempt || total_base_rt <= income_levy_exempt_limit(rt_count, rt_has_deps);
     let income_levy = if levy_exempt { 0 } else { levy[0] + levy[1] };
@@ -284,7 +286,9 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
 
     // ── 警告 ──
     if total_income_it + wh_base > MINIMUM_TAX_THRESHOLD {
-        warnings.push("基準所得金額3.3億円超の場合の「極めて高い水準の所得に対する負担の適正化措置」は考慮していません。".into());
+        warnings.push(
+            "基準所得金額3.3億円超の場合の「極めて高い水準の所得に対する負担の適正化措置」は考慮していません。".into(),
+        );
     }
     if st.dividend_mode != DividendMode::NoDeclare && dividends > 0 {
         warnings.push("配当を申告すると合計所得金額に含まれ、住民税や国保・医療費の負担区分、扶養判定に影響します（所得税と住民税は同じ課税方式）。".into());
@@ -438,11 +442,8 @@ pub fn calculate(input: &TaxInput) -> TaxResult {
 
     // 上限探索：自己負担が2,000円以下に収まる最大の寄附額（1,000円単位）
     // ワンストップ特例の可否は寄附額に依存しないため、正の寄附額で一度判定する
-    let effective_one_stop = if furusato_total > 0 {
-        current.one_stop
-    } else {
-        compute(input, FURUSATO_SEARCH_STEP, one_stop).one_stop
-    };
+    let effective_one_stop =
+        if furusato_total > 0 { current.one_stop } else { compute(input, FURUSATO_SEARCH_STEP, one_stop).one_stop };
     let burden = |f: i64| {
         let r = compute(input, f, effective_one_stop).result;
         f - ((it0 - r.income_tax.total) + (rt0 - r.resident_tax.total))
@@ -463,10 +464,7 @@ pub fn calculate(input: &TaxInput) -> TaxResult {
     }
     let limit = if lo * step >= DONATION_SELF_BURDEN { lo * step } else { 0 };
     if furusato_total > 0 && limit > 0 && furusato_total > limit {
-        result.warnings.push(format!(
-            "ふるさと納税の合計が上限の目安（{}円）を超えています。",
-            fmt_yen(limit)
-        ));
+        result.warnings.push(format!("ふるさと納税の合計が上限の目安（{}円）を超えています。", fmt_yen(limit)));
     }
 
     result.stock_options = comparison::stock_options(input, furusato_total, one_stop, result.summary.total_tax);

@@ -41,11 +41,15 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: 整形の確認
+        working-directory: src-tauri
+        run: cargo fmt --check
 
       - name: clippy
         working-directory: src-tauri

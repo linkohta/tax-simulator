@@ -7,11 +7,8 @@ pub const SALARY_DEDUCTION_MIN_IT: i64 = 740_000;
 /// 給与所得控除の最低保障額（住民税：令和9・10年度分は74万円）
 pub const SALARY_DEDUCTION_MIN_RT: i64 = 740_000;
 /// 給与所得の金額の特例（措法29条の4第2項の端数表）：(収入下限, 収入上限未満, 給与所得)
-pub static SALARY_NET_SPECIAL: &[(i64, i64, i64)] = &[
-    (2_191_000, 2_193_000, 1_451_000),
-    (2_193_000, 2_196_000, 1_453_000),
-    (2_196_000, 2_200_000, 1_456_000),
-];
+pub static SALARY_NET_SPECIAL: &[(i64, i64, i64)] =
+    &[(2_191_000, 2_193_000, 1_451_000), (2_193_000, 2_196_000, 1_453_000), (2_196_000, 2_200_000, 1_456_000)];
 
 /// 所得金額調整控除（子ども・特別障害者等を有する者等）：給与収入がこの額を超えると対象
 pub const INCOME_ADJUSTMENT_FROM: i64 = 8_500_000;
@@ -19,7 +16,6 @@ pub const INCOME_ADJUSTMENT_FROM: i64 = 8_500_000;
 pub const INCOME_ADJUSTMENT_SALARY_CAP: i64 = 10_000_000;
 /// 同：控除率（%）
 pub const INCOME_ADJUSTMENT_RATE_PCT: i64 = 10;
-
 
 // ───────────── 給与所得控除の算式 ─────────────
 
@@ -42,4 +38,3 @@ pub const SALARY_DEDUCTION_MAX: i64 = 1_950_000;
 pub const SALARY_TABLE_UNTIL: i64 = 6_600_000;
 /// 別表第五の刻み
 pub const SALARY_TABLE_STEP: i64 = 4_000;
-

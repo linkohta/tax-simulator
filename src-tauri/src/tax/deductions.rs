@@ -98,7 +98,9 @@ fn disability_deduction(d: Disability) -> Option<(&'static str, i64, i64)> {
         Disability::None => None,
         Disability::General => Some(("障害者控除", DISABLED_IT, DISABLED_RT)),
         Disability::Special => Some(("特別障害者控除", SPECIAL_DISABLED_IT, SPECIAL_DISABLED_RT)),
-        Disability::SpecialCohabiting => Some(("同居特別障害者控除", COHAB_SPECIAL_DISABLED_IT, COHAB_SPECIAL_DISABLED_RT)),
+        Disability::SpecialCohabiting => {
+            Some(("同居特別障害者控除", COHAB_SPECIAL_DISABLED_IT, COHAB_SPECIAL_DISABLED_RT))
+        }
     }
 }
 
@@ -208,7 +210,8 @@ impl FamilyContext<'_> {
         }
 
         // 本人の障害（同居特別障害者の区分は親族だけにあるので、本人は特別障害者として扱う）
-        let own = if f.self_disability == Disability::SpecialCohabiting { Disability::Special } else { f.self_disability };
+        let own =
+            if f.self_disability == Disability::SpecialCohabiting { Disability::Special } else { f.self_disability };
         if let Some((label, a_it, a_rt)) = disability_deduction(own) {
             push(&mut out, &format!("{label}（本人）"), pick(a_it, a_rt));
             out.personal_diff += a_it - a_rt;
@@ -297,12 +300,8 @@ pub fn life_insurance(ins: &InsurancePremiumInput, kind: Kind, has_dependent_und
         life_cap(general_new),
     );
     let care = life_amount(new, ins.medical_care);
-    let pension = combine(
-        life_amount(new, ins.pension_new),
-        life_amount(old, ins.pension_old),
-        ins.pension_old,
-        life_cap(new),
-    );
+    let pension =
+        combine(life_amount(new, ins.pension_new), life_amount(old, ins.pension_old), ins.pension_old, life_cap(new));
     (general + care + pension).min(total_cap)
 }
 
@@ -473,7 +472,11 @@ mod tests {
 
     #[test]
     fn spouse_by_taxpayer_income() {
-        let mut f = FamilyInput { has_spouse: true, spouse: SpouseInput { age: 40, ..Default::default() }, ..Default::default() };
+        let mut f = FamilyInput {
+            has_spouse: true,
+            spouse: SpouseInput { age: 40, ..Default::default() },
+            ..Default::default()
+        };
         // 納税者の合計所得 900万・950万・1,000万の境界
         assert_eq!(personal_of(&f, 9_000_000), (380_000, 330_000, 50_000));
         assert_eq!(personal_of(&f, 9_000_001), (260_000, 220_000, 40_000));
@@ -563,8 +566,14 @@ mod tests {
     fn income_adjustment_eligibility() {
         let none = FamilyInput::default();
         assert!(!income_adjustment_eligible(&none));
-        assert!(income_adjustment_eligible(&FamilyInput { self_disability: Disability::Special, ..Default::default() }));
-        assert!(!income_adjustment_eligible(&FamilyInput { self_disability: Disability::General, ..Default::default() }));
+        assert!(income_adjustment_eligible(&FamilyInput {
+            self_disability: Disability::Special,
+            ..Default::default()
+        }));
+        assert!(!income_adjustment_eligible(&FamilyInput {
+            self_disability: Disability::General,
+            ..Default::default()
+        }));
 
         let dep = |age, disability, other_income| FamilyInput {
             dependents: vec![DependentInput { age, disability, other_income, ..Default::default() }],
@@ -622,7 +631,12 @@ mod tests {
     fn life_rt() {
         assert_eq!(life_amount(&LIFE_NEW_RT, 56_000), 28_000);
         assert_eq!(life_amount(&LIFE_OLD_RT, 70_000), 35_000);
-        let ins = InsurancePremiumInput { life_new: 100_000, medical_care: 100_000, pension_new: 100_000, ..Default::default() };
+        let ins = InsurancePremiumInput {
+            life_new: 100_000,
+            medical_care: 100_000,
+            pension_new: 100_000,
+            ..Default::default()
+        };
         assert_eq!(life_insurance(&ins, Kind::Resident, false), 70_000);
         assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 120_000);
     }

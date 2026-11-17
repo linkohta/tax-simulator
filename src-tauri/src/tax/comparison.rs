@@ -4,12 +4,18 @@ use super::compute;
 use super::model::*;
 use super::stocks::{requires_dividend_declaration, DividendAmounts};
 
-const DIVIDEND_MODES: [DividendMode; 3] = [DividendMode::NoDeclare, DividendMode::Comprehensive, DividendMode::Separate];
+const DIVIDEND_MODES: [DividendMode; 3] =
+    [DividendMode::NoDeclare, DividendMode::Comprehensive, DividendMode::Separate];
 
 /// 課税方式ごとの税額。配当も、損益のある源泉徴収ありの特定口座もなければ空
 ///
 /// `current_total_tax` は現在の入力での税額合計。
-pub fn stock_options(input: &TaxInput, furusato_total: i64, one_stop: bool, current_total_tax: i64) -> Vec<StockOption> {
+pub fn stock_options(
+    input: &TaxInput,
+    furusato_total: i64,
+    one_stop: bool,
+    current_total_tax: i64,
+) -> Vec<StockOption> {
     let st = &input.stocks;
     let has_dividends = DividendAmounts::from_input(st).total() > 0;
     let choosable = |a: &&StockAccount| a.kind == StockAccountKind::Withholding && a.capital_gain != 0;

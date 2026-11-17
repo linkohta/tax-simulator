@@ -70,10 +70,7 @@ async fn load_scenario(window: Window) -> Result<Option<TaxInput>, String> {
     let Some(path) = dialog.blocking_pick_file() else {
         return Ok(None);
     };
-    let text = window
-        .fs()
-        .read_to_string(path)
-        .map_err(|e| format!("読み込みに失敗しました: {e}"))?;
+    let text = window.fs().read_to_string(path).map_err(|e| format!("読み込みに失敗しました: {e}"))?;
     // 旧形式の項目（合算の譲渡損益など）は現在の形式に直して画面に渡す
     serde_json::from_str::<TaxInput>(&text)
         .map(|input| Some(input.normalized()))
@@ -82,10 +79,7 @@ async fn load_scenario(window: Window) -> Result<Option<TaxInput>, String> {
 
 /// 下書きのファイルの場所（アプリのデータフォルダ内で固定。Webview からは指定できない）
 fn draft_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|dir| dir.join(DRAFT_FILE_NAME))
-        .map_err(|e| format!("保存先を取得できません: {e}"))
+    app.path().app_data_dir().map(|dir| dir.join(DRAFT_FILE_NAME)).map_err(|e| format!("保存先を取得できません: {e}"))
 }
 
 /// 入力内容を下書きとして自動保存する（次の起動時に `load_draft` で復元する）

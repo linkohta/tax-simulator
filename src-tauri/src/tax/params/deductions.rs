@@ -5,7 +5,6 @@
 /// 令和8年分：23歳未満の扶養親族がいる場合の一般生命保険料（新契約）控除上限
 pub const LIFE_GENERAL_CAP_SPECIAL_IT: i64 = 60_000;
 
-
 // ───────────── 生命保険料控除・地震保険料控除・医療費控除 ─────────────
 
 /// 生命保険料控除の算式の区切り（所法76条、地方税法34条1項5号）。
@@ -17,15 +16,20 @@ pub struct LifeInsuranceTier {
     pub quarter_until: i64,
 }
 /// 所得税・新契約（上限4万円）
-pub const LIFE_NEW_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 20_000, half_until: 40_000, quarter_until: 80_000 };
+pub const LIFE_NEW_IT: LifeInsuranceTier =
+    LifeInsuranceTier { full_until: 20_000, half_until: 40_000, quarter_until: 80_000 };
 /// 所得税・一般生命保険料の新契約で23歳未満の扶養親族がいる場合（上限6万円。令和8年分の特例）
-pub const LIFE_NEW_SPECIAL_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 30_000, half_until: 60_000, quarter_until: 120_000 };
+pub const LIFE_NEW_SPECIAL_IT: LifeInsuranceTier =
+    LifeInsuranceTier { full_until: 30_000, half_until: 60_000, quarter_until: 120_000 };
 /// 所得税・旧契約（上限5万円）
-pub const LIFE_OLD_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 25_000, half_until: 50_000, quarter_until: 100_000 };
+pub const LIFE_OLD_IT: LifeInsuranceTier =
+    LifeInsuranceTier { full_until: 25_000, half_until: 50_000, quarter_until: 100_000 };
 /// 住民税・新契約（上限2.8万円）
-pub const LIFE_NEW_RT: LifeInsuranceTier = LifeInsuranceTier { full_until: 12_000, half_until: 32_000, quarter_until: 56_000 };
+pub const LIFE_NEW_RT: LifeInsuranceTier =
+    LifeInsuranceTier { full_until: 12_000, half_until: 32_000, quarter_until: 56_000 };
 /// 住民税・旧契約（上限3.5万円）
-pub const LIFE_OLD_RT: LifeInsuranceTier = LifeInsuranceTier { full_until: 15_000, half_until: 40_000, quarter_until: 70_000 };
+pub const LIFE_OLD_RT: LifeInsuranceTier =
+    LifeInsuranceTier { full_until: 15_000, half_until: 40_000, quarter_until: 70_000 };
 /// 生命保険料控除の合計の上限（一般・介護医療・個人年金の合計）
 pub const LIFE_TOTAL_CAP_IT: i64 = 120_000;
 pub const LIFE_TOTAL_CAP_RT: i64 = 70_000;
@@ -41,8 +45,10 @@ pub struct EarthquakeTable {
     /// 旧長期損害保険料：この額以下は 1/2 + 定額、超えると上限
     pub old_half_until: i64,
 }
-pub const EARTHQUAKE_IT: EarthquakeTable = EarthquakeTable { premium_div: 1, cap: 50_000, old_full_until: 10_000, old_half_until: 20_000 };
-pub const EARTHQUAKE_RT: EarthquakeTable = EarthquakeTable { premium_div: 2, cap: 25_000, old_full_until: 5_000, old_half_until: 15_000 };
+pub const EARTHQUAKE_IT: EarthquakeTable =
+    EarthquakeTable { premium_div: 1, cap: 50_000, old_full_until: 10_000, old_half_until: 20_000 };
+pub const EARTHQUAKE_RT: EarthquakeTable =
+    EarthquakeTable { premium_div: 2, cap: 25_000, old_full_until: 5_000, old_half_until: 15_000 };
 
 /// 医療費控除の足切り：10万円と総所得金額等の5%の少ない方（所法73条）
 pub const MEDICAL_THRESHOLD: i64 = 100_000;
@@ -69,4 +75,3 @@ pub const ONE_STOP_MAX_DONEES: usize = 5;
 pub const FURUSATO_SEARCH_STEP: i64 = 1_000;
 /// 給与収入がこの額を超えると年末調整の対象外で、確定申告が必要（所法190条）
 pub const SALARY_FILING_REQUIRED_OVER: i64 = 20_000_000;
-

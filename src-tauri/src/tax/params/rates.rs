@@ -40,7 +40,6 @@ pub const DIVIDEND_CREDIT_RT_PREF: [[i64; 2]; 3] = [[1_200, 600], [600, 300], [3
 pub const FOREIGN_TAX_CREDIT_RT_PREF_PCT: i64 = 12;
 pub const FOREIGN_TAX_CREDIT_RT_MUNI_PCT: i64 = 18;
 
-
 // ───────────── 税率 ─────────────
 
 /// 申告分離課税の上場株式等の所得税率（%。措法8条の4・37条の11）
@@ -58,4 +57,3 @@ pub const ADJUSTMENT_CREDIT_THRESHOLD: i64 = 2_000_000;
 pub const ADJUSTMENT_CREDIT_RATE_PCT: [i64; 2] = [3, 2];
 /// 調整控除の最低額 [市町村, 道府県]（合計2,500円。200万円超の算式で下回る場合）
 pub const ADJUSTMENT_CREDIT_MIN: [i64; 2] = [1_500, 1_000];
-

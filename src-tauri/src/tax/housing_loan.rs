@@ -71,11 +71,15 @@ fn auto_credit(hl: &HousingLoanInput, total_income: i64) -> (i64, Vec<String>) {
         return expired();
     }
     if total_income > t.income_limit {
-        let w = format!("合計所得金額が{}円を超えるため、住宅借入金等特別控除は受けられません。", fmt_yen(t.income_limit));
+        let w =
+            format!("合計所得金額が{}円を超えるため、住宅借入金等特別控除は受けられません。", fmt_yen(t.income_limit));
         return (0, vec![w]);
     }
     let mut warnings = Vec::new();
-    if !hl.existing_house && hl.housing_type == HousingType::Other && year >= HOUSING_LOAN_OTHER_NEW_RESTRICTED_FROM_YEAR {
+    if !hl.existing_house
+        && hl.housing_type == HousingType::Other
+        && year >= HOUSING_LOAN_OTHER_NEW_RESTRICTED_FROM_YEAR
+    {
         warnings.push(
             "省エネ基準に適合しない新築住宅は、2023年末までに建築確認を受けたものなどに限って控除できます（買取再販住宅を除く）。該当するものとして計算しています。"
                 .into(),
@@ -190,7 +194,10 @@ mod tests {
     fn new_house_earlier_years() {
         // 令和6・7年：省エネ 3,000万（上乗せ 4,000万）
         assert_eq!(amount(&auto(2025, HousingType::EnergySaving, 3_500)), 210_000);
-        assert_eq!(amount(&HousingLoanInput { child_rearing: true, ..auto(2025, HousingType::EnergySaving, 3_500) }), 245_000);
+        assert_eq!(
+            amount(&HousingLoanInput { child_rearing: true, ..auto(2025, HousingType::EnergySaving, 3_500) }),
+            245_000
+        );
         assert_eq!(amount(&auto(2024, HousingType::Zeh, 4_000)), 245_000);
         // 令和4・5年：認定 5,000万、ZEH 4,500万、省エネ 4,000万、その他 3,000万（上乗せなし）
         assert_eq!(amount(&auto(2023, HousingType::Certified, 6_000)), 350_000);
@@ -235,7 +242,10 @@ mod tests {
         assert_eq!(amount(&auto(2021, HousingType::Certified, 4_000)), 300_000);
         // 当時なかった区分（ZEH など）は一般の住宅として扱う。認定の上乗せは新築だけ
         assert_eq!(amount(&specific(2020, HousingType::Zeh, 4_500)), 400_000);
-        assert_eq!(amount(&HousingLoanInput { existing_house: true, ..specific(2020, HousingType::Certified, 6_000) }), 400_000);
+        assert_eq!(
+            amount(&HousingLoanInput { existing_house: true, ..specific(2020, HousingType::Certified, 6_000) }),
+            400_000
+        );
     }
 
     #[test]

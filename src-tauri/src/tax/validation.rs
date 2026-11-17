@@ -22,10 +22,8 @@ pub fn input_warnings(input: &TaxInput, total_income: i64) -> Vec<String> {
             ));
         }
     }
-    let has_qualifying_relative = fam
-        .dependents
-        .iter()
-        .any(|d| relative_income(d.salary_income, d.other_income) <= DEPENDENT_INCOME_LIMIT);
+    let has_qualifying_relative =
+        fam.dependents.iter().any(|d| relative_income(d.salary_income, d.other_income) <= DEPENDENT_INCOME_LIMIT);
     if single_parent && !has_qualifying_relative {
         w.push("ひとり親控除は、生計を一にする子（所得要件を満たす人）がいる場合に限られます。扶養親族の欄に子を入力してください。".into());
     }
@@ -37,7 +35,8 @@ pub fn input_warnings(input: &TaxInput, total_income: i64) -> Vec<String> {
     }
 
     let si = &input.social_insurance;
-    if si.mode == SocialInsuranceMode::Auto && si.health_plan == HealthPlan::Custom && si.custom_health_rate_x1000 <= 0 {
+    if si.mode == SocialInsuranceMode::Auto && si.health_plan == HealthPlan::Custom && si.custom_health_rate_x1000 <= 0
+    {
         w.push("健康保険料率が入力されていないため、健康保険料を0円として概算しています。".into());
     }
     if input.social_insurance.mode == SocialInsuranceMode::Auto {
