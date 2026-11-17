@@ -128,7 +128,7 @@ export interface TaxResult {
     dividendSeparate: number;
     capitalGainSeparate: number;
     totalIncome: number;
-    totalIncomeForTests: number;
+    totalIncomeBeforeCarryover: number;
     lossCarriedToNextYear: number;
   };
   socialInsurance: {

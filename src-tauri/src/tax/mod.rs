@@ -65,19 +65,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let salary_ded_it = deductions::salary_deduction(salary, Kind::IncomeTax);
     let salary_ded_rt = deductions::salary_deduction(salary, Kind::Resident);
 
-    // 所得金額調整控除の判定に必要な親族情報（先に所得額を使わず判定できる部分）
-    let has_under23 = fam.dependents.iter().any(|d| {
-        d.age < YOUNG_DEPENDENT_AGE_UNTIL && deductions::relative_income(d.salary_income, d.other_income) <= DEPENDENT_INCOME_LIMIT
-    });
-    let special_disabled_relative = (fam.has_spouse
-        && matches!(fam.spouse.disability, Disability::Special | Disability::SpecialCohabiting)
-        && deductions::relative_income(fam.spouse.salary_income, fam.spouse.other_income) <= DEPENDENT_INCOME_LIMIT)
-        || fam.dependents.iter().any(|d| {
-            matches!(d.disability, Disability::Special | Disability::SpecialCohabiting)
-                && deductions::relative_income(d.salary_income, d.other_income) <= DEPENDENT_INCOME_LIMIT
-        });
-    let self_special = matches!(fam.self_disability, Disability::Special | Disability::SpecialCohabiting);
-    let adj = deductions::income_adjustment(salary, has_under23 || special_disabled_relative || self_special);
+    let adj = deductions::income_adjustment(salary, deductions::income_adjustment_eligible(fam));
     let salary_net_it = (salary - salary_ded_it - adj).max(0);
     let salary_net_rt = (salary - salary_ded_rt - adj).max(0);
 
@@ -315,7 +303,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
             dividend_separate: div_sep,
             capital_gain_separate: gain,
             total_income: total_base_it,
-            total_income_for_tests: total_income_it,
+            total_income_before_carryover: total_income_it,
             loss_carried_to_next_year: loss_next,
         },
         social_insurance: si.clone(),
@@ -430,7 +418,7 @@ pub fn calculate(input: &TaxInput) -> TaxResult {
     let one_stop = input.donations.one_stop;
     let current = compute(input, furusato_total, one_stop);
     let mut result = current.result;
-    result.warnings.extend(validation::input_warnings(input, result.income.total_income_for_tests));
+    result.warnings.extend(validation::input_warnings(input, result.income.total_income_before_carryover));
 
     // 寄附なしの税額と比較
     let base = compute(input, 0, one_stop).result;

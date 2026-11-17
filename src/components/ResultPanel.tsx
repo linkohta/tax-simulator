@@ -149,7 +149,7 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
             {inc.dividendComprehensive > 0 && <Row label="配当所得（総合課税）" value={inc.dividendComprehensive} />}
             {inc.dividendSeparate > 0 && <Row label="配当所得等（分離・通算後）" value={inc.dividendSeparate} />}
             {inc.capitalGainSeparate > 0 && <Row label="譲渡所得等（分離）" value={inc.capitalGainSeparate} />}
-            <Row label="合計所得金額" value={inc.totalIncomeForTests} strong />
+            <Row label="合計所得金額" value={inc.totalIncomeBeforeCarryover} strong />
             {inc.lossCarriedToNextYear > 0 && <Row label="翌年に繰り越す譲渡損失" value={inc.lossCarriedToNextYear} />}
           </tbody>
         </table>
