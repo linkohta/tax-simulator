@@ -420,6 +420,20 @@ pub struct TaxResult {
     pub warnings: Vec<String>,
 }
 
+/// 給与収入を変えたときの内訳（グラフの1点）。4つの合計は収入の合計に一致する
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurvePoint {
+    /// 給与収入
+    pub salary: i64,
+    pub take_home: i64,
+    pub social_insurance: i64,
+    /// 所得税及び復興特別所得税（申告不要とした株式の源泉徴収税の所得税分を含む）
+    pub income_tax: i64,
+    /// 住民税（同、住民税分を含む）
+    pub resident_tax: i64,
+}
+
 /// ある控除がなかった場合と比べて減っている税額
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,5 +1,6 @@
-import { DeductionItem, DividendMode, StockOption, TaxResult } from "../types";
+import { CurvePoint, DeductionItem, DividendMode, StockOption, TaxResult } from "../types";
 import { yen } from "./Fields";
+import { IncomeChart } from "./IncomeChart";
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
@@ -81,7 +82,9 @@ function StockOptions({ options }: { options: StockOption[] }) {
   );
 }
 
-export function ResultPanel({ result }: { result: TaxResult | null }) {
+type Props = { result: TaxResult | null; curve: CurvePoint[]; currentSalary: number };
+
+export function ResultPanel({ result, curve, currentSalary }: Props) {
   if (!result) return <div className="result empty">計算中…</div>;
   const { summary: s, income: inc, incomeTax: it, residentTax: rt, socialInsurance: si, furusato: fu } = result;
 
@@ -241,6 +244,8 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
           </table>
         </details>
       )}
+
+      <IncomeChart curve={curve} currentSalary={currentSalary} />
 
       {result.savings.length > 0 && (
         <details open>

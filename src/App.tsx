@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { InputForm } from "./components/InputForm";
 import { ResultPanel } from "./components/ResultPanel";
 import { yen } from "./components/Fields";
-import { TaxInput, TaxResult, defaultInput } from "./types";
+import { CurvePoint, TaxInput, TaxResult, defaultInput } from "./types";
 import "./App.css";
 
 /** 狭い画面（スマホ）で表示するペイン。広い画面では両方を並べるので使わない */
@@ -15,6 +15,7 @@ const DRAFT_SAVE_DELAY_MS = 800;
 function App() {
   const [input, setInputState] = useState<TaxInput>(defaultInput);
   const [result, setResult] = useState<TaxResult | null>(null);
+  const [curve, setCurve] = useState<CurvePoint[]>([]);
   const [prefectures, setPrefectures] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [calcError, setCalcError] = useState<string | null>(null);
@@ -39,6 +40,12 @@ function App() {
           }
         })
         .catch((e) => setCalcError(`計算エラー: ${e}`));
+      // 年収別のグラフ用。失敗してもグラフが出ないだけなので、エラーにはしない
+      invoke<CurvePoint[]>("salary_curve", { input })
+        .then((c) => {
+          if (id === seq.current) setCurve(c);
+        })
+        .catch(() => setCurve([]));
     }, 120);
     return () => clearTimeout(t);
   }, [input]);
@@ -141,7 +148,7 @@ function App() {
       </header>
       <main data-view={view}>
         <InputForm input={input} setInput={setInput} prefectures={prefectures} />
-        <ResultPanel result={result} />
+        <ResultPanel result={result} curve={curve} currentSalary={input.salary.annualIncome} />
       </main>
       <nav className="tabbar" aria-label="表示の切り替え">
         <button

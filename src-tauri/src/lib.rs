@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime, Window};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 use tauri_plugin_fs::{FsExt, OpenOptions};
-use tax::model::{TaxInput, TaxResult};
+use tax::model::{CurvePoint, TaxInput, TaxResult};
 
 /// 保存・読込ダイアログで選べるファイルの種類
 const SCENARIO_FILTER_NAME: &str = "税シミュレーション";
@@ -20,6 +20,12 @@ const DRAFT_FILE_NAME: &str = "draft.json";
 #[tauri::command]
 fn calculate(input: TaxInput) -> TaxResult {
     tax::calculate(&input)
+}
+
+/// 給与収入を変えたときの手取りと税・社会保険料（年収別のグラフ用）
+#[tauri::command]
+fn salary_curve(input: TaxInput) -> Vec<CurvePoint> {
+    tax::curve::salary_curve(&input)
 }
 
 /// 協会けんぽの都道府県一覧（概算用）
@@ -123,7 +129,8 @@ pub fn run() {
             save_scenario,
             load_scenario,
             save_draft,
-            load_draft
+            load_draft,
+            salary_curve
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

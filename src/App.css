@@ -11,6 +11,11 @@
   --warn: #9a5b00;
   --warn-soft: #fff4dc;
   --danger: #c0352b;
+  /* グラフの系列の色（手取り・社会保険料・所得税・住民税）。ライト／ダークそれぞれで見分けやすさを検証済み */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
   font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
   font-size: 14px;
   color: var(--text);
@@ -31,6 +36,10 @@
     --warn: #f0b456;
     --warn-soft: #3a2e17;
     --danger: #ff7b72;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
   }
 }
 
@@ -183,4 +192,19 @@ table.compare td.num { padding-left: 8px; }
 table.compare tr.current td { font-weight: 600; }
 .tag { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .tag.best { background: var(--good-soft); color: var(--good); }
+/* 年収別のグラフ */
+.chart { height: 240px; margin-top: 6px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; }
+.chart-legend li { display: flex; align-items: center; gap: 5px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.swatch.takeHome { background: var(--series-1); }
+.swatch.socialInsurance { background: var(--series-2); }
+.swatch.incomeTax { background: var(--series-3); }
+.swatch.residentTax { background: var(--series-4); }
+.chart-tooltip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, .18); }
+.chart-tooltip-title { font-weight: 600; margin-bottom: 4px; }
+.chart-tooltip-row { display: flex; align-items: center; gap: 6px; }
+.chart-tooltip-row .num { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+.result details details { border-top: none; margin-top: 4px; padding-top: 0; }
+.result details details > summary { font-weight: 500; font-size: 12px; color: var(--muted); }
 .disclaimer { font-size: 11px; color: var(--muted); margin-top: 20px; }

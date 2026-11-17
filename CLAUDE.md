@@ -8,7 +8,7 @@
 |---|---|
 | アプリ基盤 | Tauri 2（`tauri-plugin-dialog`, `tauri-plugin-fs`） |
 | 計算エンジン | Rust（edition 2021）、serde / serde_json |
-| 画面 | React 19 + TypeScript + Vite（UIライブラリなし、素の CSS） |
+| 画面 | React 19 + TypeScript + Vite（素の CSS。グラフだけ Recharts を使う） |
 
 ## コマンド
 
@@ -34,6 +34,7 @@ npm run tauri android build -- --aab  # Google Play 用 AAB
 - 株式の課税方式の比較（配当の3方式 × 源泉徴収ありの特定口座を申告するか）と、口座ごとの譲渡損益
 - 税額控除：配当控除（投資信託の区分を含む）、外国税額控除、住宅借入金等特別控除、住民税の調整控除・寄附金税額控除（基本分・特例分・申告特例分）
 - 控除ごとの節税額の表示（iDeCo等、生命保険料、地震保険料、医療費、住宅ローン、その他の寄附金）
+- 年収別の手取りグラフ（給与収入を変えたときの手取り・社会保険料・所得税・住民税の積み上げ）
 - ふるさと納税の上限額の探索（自己負担2,000円以内の最大寄附額を二分探索）
 - 入力シナリオの JSON 保存・読込、入力の自動保存と起動時の復元（アプリのデータフォルダの `draft.json`）
 
@@ -41,11 +42,12 @@ npm run tauri android build -- --aab  # Google Play 用 AAB
 
 ```
 src-tauri/src/
-  lib.rs              Tauri コマンド（calculate / prefectures / save_scenario / load_scenario / save_draft / load_draft）
+  lib.rs              Tauri コマンド（calculate / prefectures / save_scenario / load_scenario / save_draft / load_draft / salary_curve）
   tax/
     mod.rs            計算の本体 compute() と公開 API calculate()
     model.rs          入出力のデータモデル（serde, camelCase）
     params/           税率・控除額・料率などの定数（分野ごとのファイル。mod.rs ですべて再公開する）
+    curve.rs          給与収入を変えたときの内訳（年収別のグラフ用）
     deductions.rs     給与所得、人的控除、保険料控除、医療費控除
     savings.rs        控除ごとの節税額（その控除がない場合との差）
     social.rs         社会保険料の概算
@@ -118,7 +120,8 @@ src-tauri/gen/android/  Android プロジェクト（手を加えているので
 - `types.ts` は `model.rs` と手作業で同期している。**Rust のモデルを変えたら、同じ変更で `types.ts`（型と `defaultInput`）も直す。**
 - 金額は `MoneyInput`、真偽は `Check`、選択肢は `Select` を使う。素の `<input>` を増やさない。
 - 状態の更新は `useSection` で作る部分更新関数を使い、イミュータブルに行う。
-- 色は `App.css` の CSS 変数で指定し、ライトとダークの両方で読めるようにする。
+- 色は `App.css` の CSS 変数で指定し、ライトとダークの両方で読めるようにする。グラフの系列の色は `--series-*`（見分けやすさを検証した組み合わせなので、変えるときはライト・ダークの両方で検証し直す）。
+- UI ライブラリはグラフ（Recharts）に限る。入力部品などは引き続き素の CSS と `Fields.tsx` で作る。
 - スマホ幅（860px 以下、入力/結果をタブで切り替え）でも崩れないこと。タッチ操作の大きさは `@media (max-width: 860px)` 内で調整する。
 - UI の文言は日本語。税の用語は国税庁の表記に合わせる（例：「寄附金」、「寄付金」とは書かない）。
 
