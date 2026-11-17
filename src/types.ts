@@ -80,6 +80,14 @@ export interface HousingLoanInput {
   specificAcquisition: boolean;
 }
 
+export interface CurvePoint {
+  salary: number;
+  takeHome: number;
+  socialInsurance: number;
+  incomeTax: number;
+  residentTax: number;
+}
+
 export interface SavingItem {
   label: string;
   incomeTax: number;

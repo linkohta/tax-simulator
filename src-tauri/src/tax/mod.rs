@@ -1,6 +1,7 @@
 //! 令和8年分所得税・令和9年度住民税の計算エンジン
 
 pub mod comparison;
+pub mod curve;
 pub mod deductions;
 pub mod foreign_tax;
 pub mod housing_loan;
