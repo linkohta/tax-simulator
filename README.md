@@ -68,6 +68,10 @@ AAB は `src-tauri/gen/android/app/build/outputs/bundle/universalRelease/` に�
 
 画面幅 860px 以下では、入力と結果を下部のタブで切り替えます。保存・読込は Android のファイル選択画面を使います。
 
+## 入力の自動保存
+
+入力内容は、変更のたびにアプリのデータフォルダの `draft.json` に自動で保存し、次の起動時に復元します（Windows では `%APPDATA%\io.github.masterlink.taxsimulator\`、Android ではアプリ専用の領域）。暗号化はしていません。「リセット」を押すと初期値で上書きされます。
+
 ## 構成
 
 | パス | 内容 |

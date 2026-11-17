@@ -9,6 +9,9 @@ import "./App.css";
 /** 狭い画面（スマホ）で表示するペイン。広い画面では両方を並べるので使わない */
 type MobileView = "input" | "result";
 
+/** 入力が止まってから下書きを自動保存するまでの時間 */
+const DRAFT_SAVE_DELAY_MS = 800;
+
 function App() {
   const [input, setInputState] = useState<TaxInput>(defaultInput);
   const [result, setResult] = useState<TaxResult | null>(null);
@@ -39,6 +42,42 @@ function App() {
     }, 120);
     return () => clearTimeout(t);
   }, [input]);
+
+  // 起動時に前回の入力（下書き）を復元する。復元が済むまでは自動保存しない（初期値で上書きしないため）
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    invoke<TaxInput | null>("load_draft")
+      .then((draft) => {
+        if (draft) setInputState(draft);
+      })
+      .catch((e) => flash(`前回の入力を復元できませんでした: ${e}`))
+      .finally(() => setRestored(true));
+  }, []);
+
+  // 入力が変わったら少し待って下書きを保存する。保存先は Rust 側で決める（Webview からパスを渡さない）
+  const latestInput = useRef(input);
+  latestInput.current = input;
+  const draftErrorShown = useRef(false);
+  const saveDraft = () =>
+    invoke("save_draft", { input: latestInput.current }).catch((e) => {
+      // 失敗のたびに出すと邪魔なので、最初の1回だけ知らせる
+      if (!draftErrorShown.current) flash(`入力の自動保存に失敗しました: ${e}`);
+      draftErrorShown.current = true;
+    });
+  useEffect(() => {
+    if (!restored) return;
+    const t = setTimeout(saveDraft, DRAFT_SAVE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [input, restored]);
+  // アプリが裏に回るとき（スマホでの切り替えなど）は待たずに保存する
+  useEffect(() => {
+    if (!restored) return;
+    const onHide = () => {
+      if (document.visibilityState === "hidden") saveDraft();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [restored]);
 
   // リセットは2回押して実行する（1回目で確認表示に変わり、数秒で元に戻る）
   const [confirmingReset, setConfirmingReset] = useState(false);
