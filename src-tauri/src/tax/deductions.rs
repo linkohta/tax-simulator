@@ -89,7 +89,29 @@ pub struct PersonalDeductions {
     pub has_dependents_for_exemption: bool,
     /// 23歳未満の扶養親族（生命保険料控除の特例・所得金額調整控除の判定）
     pub has_dependent_under_23: bool,
-    pub has_special_disability_relative: bool,
+}
+
+/// 障害者控除の (名称, 所得税の額, 住民税の額)。該当しなければ `None`。
+/// 調整控除に使う人的控除差は、所得税の額と住民税の額の差。
+fn disability_deduction(d: Disability) -> Option<(&'static str, i64, i64)> {
+    match d {
+        Disability::None => None,
+        Disability::General => Some(("障害者控除", DISABLED_IT, DISABLED_RT)),
+        Disability::Special => Some(("特別障害者控除", SPECIAL_DISABLED_IT, SPECIAL_DISABLED_RT)),
+        Disability::SpecialCohabiting => Some(("同居特別障害者控除", COHAB_SPECIAL_DISABLED_IT, COHAB_SPECIAL_DISABLED_RT)),
+    }
+}
+
+/// 所得金額調整控除（子ども・特別障害者等を有する者等）の対象か（給与収入の要件を除く）。
+/// 本人が特別障害者、23歳未満の扶養親族がいる、特別障害者の同一生計配偶者・扶養親族がいる、のいずれか。
+pub fn income_adjustment_eligible(f: &FamilyInput) -> bool {
+    let special = |d: Disability| matches!(d, Disability::Special | Disability::SpecialCohabiting);
+    let qualifies = |salary: i64, other: i64| relative_income(salary, other) <= DEPENDENT_INCOME_LIMIT;
+    special(f.self_disability)
+        || (f.has_spouse && special(f.spouse.disability) && qualifies(f.spouse.salary_income, f.spouse.other_income))
+        || f.dependents.iter().any(|d| {
+            (d.age < YOUNG_DEPENDENT_AGE_UNTIL || special(d.disability)) && qualifies(d.salary_income, d.other_income)
+        })
 }
 
 pub struct FamilyContext<'a> {
@@ -133,24 +155,9 @@ impl FamilyContext<'_> {
                     push(&mut out, if elderly { "配偶者控除（老人）" } else { "配偶者控除" }, amt);
                     out.personal_diff += if elderly { SPOUSE_DIFF_ELDERLY[t] } else { SPOUSE_DIFF[t] };
                 }
-                match sp.disability {
-                    Disability::None => {}
-                    Disability::General => {
-                        push(&mut out, "障害者控除（配偶者）", pick(DISABLED_IT, DISABLED_RT));
-                        out.personal_diff += DISABLED_IT - DISABLED_RT;
-                    }
-                    Disability::Special => {
-                        push(&mut out, "特別障害者控除（配偶者）", pick(SPECIAL_DISABLED_IT, SPECIAL_DISABLED_RT));
-                        out.personal_diff += SPECIAL_DISABLED_IT - SPECIAL_DISABLED_RT;
-                    }
-                    Disability::SpecialCohabiting => {
-                        push(&mut out, "同居特別障害者控除（配偶者）", pick(COHAB_SPECIAL_DISABLED_IT, COHAB_SPECIAL_DISABLED_RT));
-                        out.personal_diff += COHAB_SPECIAL_DISABLED_IT - COHAB_SPECIAL_DISABLED_RT;
-                        out.has_special_disability_relative = true;
-                    }
-                }
-                if matches!(sp.disability, Disability::Special) {
-                    out.has_special_disability_relative = true;
+                if let Some((label, a_it, a_rt)) = disability_deduction(sp.disability) {
+                    push(&mut out, &format!("{label}（配偶者）"), pick(a_it, a_rt));
+                    out.personal_diff += a_it - a_rt;
                 }
             } else if let Some(t) = taxpayer_tier(ti) {
                 if let Some(row) = SPOUSE_SPECIAL.iter().find(|r| sp_income <= r.upper) {
@@ -193,31 +200,18 @@ impl FamilyContext<'_> {
             }
             // 障害者控除は扶養控除の対象外（16歳未満）でも適用。所得要件は扶養親族と同じ
             if inc <= DEPENDENT_INCOME_LIMIT {
-                let (label, a_it, a_rt) = match d.disability {
-                    Disability::None => continue,
-                    Disability::General => ("障害者控除", DISABLED_IT, DISABLED_RT),
-                    Disability::Special => ("特別障害者控除", SPECIAL_DISABLED_IT, SPECIAL_DISABLED_RT),
-                    Disability::SpecialCohabiting => ("同居特別障害者控除", COHAB_SPECIAL_DISABLED_IT, COHAB_SPECIAL_DISABLED_RT),
-                };
-                if matches!(d.disability, Disability::Special | Disability::SpecialCohabiting) {
-                    out.has_special_disability_relative = true;
+                if let Some((label, a_it, a_rt)) = disability_deduction(d.disability) {
+                    push(&mut out, &format!("{label}：{label_name}"), pick(a_it, a_rt));
+                    out.personal_diff += a_it - a_rt;
                 }
-                push(&mut out, &format!("{label}：{label_name}"), pick(a_it, a_rt));
-                out.personal_diff += a_it - a_rt;
             }
         }
 
-        // 本人の障害
-        match f.self_disability {
-            Disability::None => {}
-            Disability::General => {
-                push(&mut out, "障害者控除（本人）", pick(DISABLED_IT, DISABLED_RT));
-                out.personal_diff += DIFF_DISABLED;
-            }
-            Disability::Special | Disability::SpecialCohabiting => {
-                push(&mut out, "特別障害者控除（本人）", pick(SPECIAL_DISABLED_IT, SPECIAL_DISABLED_RT));
-                out.personal_diff += DIFF_SPECIAL_DISABLED;
-            }
+        // 本人の障害（同居特別障害者の区分は親族だけにあるので、本人は特別障害者として扱う）
+        let own = if f.self_disability == Disability::SpecialCohabiting { Disability::Special } else { f.self_disability };
+        if let Some((label, a_it, a_rt)) = disability_deduction(own) {
+            push(&mut out, &format!("{label}（本人）"), pick(a_it, a_rt));
+            out.personal_diff += a_it - a_rt;
         }
 
         // 寡婦・ひとり親（合計所得500万円以下）
@@ -543,6 +537,57 @@ mod tests {
         let ctx = f(10, 0, false);
         let r = FamilyContext { family: &ctx, total_income: 5_000_000 }.personal(Kind::Resident);
         assert_eq!((r.household_count, r.has_dependents_for_exemption, r.has_dependent_under_23), (2, true, true));
+    }
+
+    #[test]
+    fn spouse_disability() {
+        let f = |disability, other_income| FamilyInput {
+            has_spouse: true,
+            spouse: SpouseInput { age: 40, disability, other_income, ..Default::default() },
+            ..Default::default()
+        };
+        // 配偶者控除 38万/33万（差5万）に障害者控除を加える
+        assert_eq!(personal_of(&f(Disability::General, 0), 5_000_000), (650_000, 590_000, 60_000));
+        assert_eq!(personal_of(&f(Disability::Special, 0), 5_000_000), (780_000, 630_000, 150_000));
+        assert_eq!(personal_of(&f(Disability::SpecialCohabiting, 0), 5_000_000), (1_130_000, 860_000, 270_000));
+        // 納税者の所得が1,000万円を超えて配偶者控除がなくても、障害者控除は受けられる
+        assert_eq!(personal_of(&f(Disability::General, 0), 10_000_001), (270_000, 260_000, 10_000));
+        // 同一生計配偶者（所得62万円以下）でなければ受けられない
+        assert_eq!(personal_of(&f(Disability::General, 620_001), 5_000_000), (380_000, 330_000, 0));
+        // 本人に同居特別障害者の区分はない（特別障害者と同じ）
+        let own = FamilyInput { self_disability: Disability::SpecialCohabiting, ..Default::default() };
+        assert_eq!(personal_of(&own, 5_000_000), (400_000, 300_000, 100_000));
+    }
+
+    #[test]
+    fn income_adjustment_eligibility() {
+        let none = FamilyInput::default();
+        assert!(!income_adjustment_eligible(&none));
+        assert!(income_adjustment_eligible(&FamilyInput { self_disability: Disability::Special, ..Default::default() }));
+        assert!(!income_adjustment_eligible(&FamilyInput { self_disability: Disability::General, ..Default::default() }));
+
+        let dep = |age, disability, other_income| FamilyInput {
+            dependents: vec![DependentInput { age, disability, other_income, ..Default::default() }],
+            ..Default::default()
+        };
+        // 23歳未満の扶養親族
+        assert!(income_adjustment_eligible(&dep(22, Disability::None, 0)));
+        assert!(!income_adjustment_eligible(&dep(23, Disability::None, 0)));
+        assert!(!income_adjustment_eligible(&dep(22, Disability::None, 620_001)));
+        // 特別障害者の扶養親族（年齢によらない）
+        assert!(income_adjustment_eligible(&dep(40, Disability::Special, 0)));
+        assert!(income_adjustment_eligible(&dep(40, Disability::SpecialCohabiting, 0)));
+        assert!(!income_adjustment_eligible(&dep(40, Disability::General, 0)));
+
+        // 特別障害者の同一生計配偶者
+        let spouse = |has_spouse, other_income| FamilyInput {
+            has_spouse,
+            spouse: SpouseInput { age: 40, disability: Disability::Special, other_income, ..Default::default() },
+            ..Default::default()
+        };
+        assert!(income_adjustment_eligible(&spouse(true, 620_000)));
+        assert!(!income_adjustment_eligible(&spouse(true, 620_001)));
+        assert!(!income_adjustment_eligible(&spouse(false, 0)));
     }
 
     #[test]

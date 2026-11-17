@@ -358,7 +358,7 @@ pub struct IncomeBreakdown {
     /// 総所得金額等（繰越控除後）
     pub total_income: i64,
     /// 合計所得金額（扶養判定・基礎控除判定用）
-    pub total_income_for_tests: i64,
+    pub total_income_before_carryover: i64,
     /// 翌年へ繰り越す譲渡損失
     pub loss_carried_to_next_year: i64,
 }
