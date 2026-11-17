@@ -8,6 +8,7 @@ import {
   yen,
 } from "./Fields";
 import { DependentInput, TaxInput, newDependent } from "../types";
+import { StockSection } from "./sections/StockSection";
 
 type Props = {
   input: TaxInput;
@@ -39,7 +40,6 @@ export function InputForm({ input, setInput, prefectures }: Props) {
   const fam = input.family;
   const ins = input.insurance;
   const don = input.donations;
-  const st = input.stocks;
   const med = input.medical;
 
   const updateDependent = (i: number, patch: Partial<DependentInput>) =>
@@ -441,47 +441,17 @@ export function InputForm({ input, setInput, prefectures }: Props) {
             hint="住民税から控除できる限度額の計算方法が異なります"
           />
         )}
+        {input.housingLoan.creditAmount > 0 && !input.housingLoan.movedIn2026OrLater && (
+          <Check
+            label="2014年4月〜2021年12月に居住を開始し、消費税率8%・10%で取得した"
+            checked={input.housingLoan.specificAcquisition}
+            onChange={(specificAcquisition) => setHl({ specificAcquisition })}
+            hint="住民税から控除できる限度額が7%（最高136,500円）になります。それ以外は5%（最高97,500円）"
+          />
+        )}
       </Section>
 
-      <Section title="株式（上場株式等）">
-        <div className="grid">
-          <MoneyInput
-            label="配当等（税引前・年額）"
-            value={st.dividends}
-            onChange={(dividends) => setStock({ dividends })}
-            hint="NISA口座分は含めない"
-          />
-          <Select
-            label="配当の課税方式"
-            value={st.dividendMode}
-            onChange={(dividendMode) => setStock({ dividendMode })}
-            options={[
-              { value: "noDeclare", label: "申告不要（源泉徴収で完結）" },
-              { value: "comprehensive", label: "総合課税（配当控除）" },
-              { value: "separate", label: "申告分離課税" },
-            ]}
-            hint="所得税と住民税で同じ方式になります"
-          />
-          <MoneyInput
-            label="譲渡損益（年間通算・税引前）"
-            value={st.capitalGain}
-            onChange={(capitalGain) => setStock({ capitalGain })}
-            allowNegative
-            hint="損失はマイナスで入力"
-          />
-          <MoneyInput
-            label="繰越損失（前年以前分）"
-            value={st.lossCarryforward}
-            onChange={(lossCarryforward) => setStock({ lossCarryforward })}
-          />
-        </div>
-        <Check
-          label="譲渡損益を確定申告する"
-          checked={st.declareCapitalGain}
-          onChange={(declareCapitalGain) => setStock({ declareCapitalGain })}
-          hint="源泉徴収ありの特定口座で申告しない場合はチェック不要。損益通算・繰越控除には申告が必要"
-        />
-      </Section>
+      <StockSection stocks={input.stocks} setStock={setStock} />
     </div>
   );
 }

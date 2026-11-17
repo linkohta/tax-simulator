@@ -27,6 +27,41 @@ export interface FurusatoEntry {
   amount: number;
 }
 
+export type StockAccountKind = "withholding" | "noWithholding" | "general";
+
+export interface StockAccount {
+  name: string;
+  kind: StockAccountKind;
+  capitalGain: number;
+  declare: boolean;
+}
+
+/** 旧形式の capitalGain / declareCapitalGain は Rust 側が読込時に accounts へ移すので、ここには持たない */
+export interface StockInput {
+  dividends: number;
+  dividendsFund: number;
+  dividendsForeignFund: number;
+  dividendsNoCredit: number;
+  dividendMode: DividendMode;
+  accounts: StockAccount[];
+  lossCarryforward: number;
+  foreignIncome: number;
+  foreignTaxPaid: number;
+}
+
+export interface StockOption {
+  dividendMode: DividendMode;
+  declareWithholdingAccounts: boolean | null;
+  incomeTax: number;
+  residentTax: number;
+  stockWithholding: number;
+  totalTax: number;
+  lossCarriedToNextYear: number;
+  diffFromCurrent: number;
+  isCurrent: boolean;
+  isBest: boolean;
+}
+
 export interface TaxInput {
   age: number;
   salary: { annualIncome: number };
@@ -74,14 +109,8 @@ export interface TaxInput {
     otherIncomeTaxOnly: number;
     otherResidentDesignated: number;
   };
-  stocks: {
-    dividends: number;
-    dividendMode: DividendMode;
-    capitalGain: number;
-    declareCapitalGain: boolean;
-    lossCarryforward: number;
-  };
-  housingLoan: { creditAmount: number; movedIn2026OrLater: boolean };
+  stocks: StockInput;
+  housingLoan: { creditAmount: number; movedIn2026OrLater: boolean; specificAcquisition: boolean };
 }
 
 export interface DeductionItem {
@@ -124,6 +153,7 @@ export interface TaxResult {
     credits: DeductionItem[];
     baseTax: number;
     reconstructionTax: number;
+    foreignTaxCredit: number;
     total: number;
     marginalRate: number;
   };
@@ -148,6 +178,7 @@ export interface TaxResult {
     incomeTaxReduction: number;
     residentTaxReduction: number;
   };
+  stockOptions: StockOption[];
   summary: {
     grossIncome: number;
     socialInsurance: number;
@@ -171,7 +202,14 @@ export const newDependent = (): DependentInput => ({
   disability: "none",
 });
 
-export const defaultInput = (): TaxInput => ({
+export const newStockAccount = (): StockAccount => ({
+  name: "",
+  kind: "withholding",
+  capitalGain: 0,
+  declare: false,
+});
+
+export const defaultInput =(): TaxInput => ({
   age: 35,
   salary: { annualIncome: 5_000_000 },
   socialInsurance: {
@@ -206,10 +244,14 @@ export const defaultInput = (): TaxInput => ({
   donations: { furusato: [], oneStop: true, otherIncomeTaxOnly: 0, otherResidentDesignated: 0 },
   stocks: {
     dividends: 0,
+    dividendsFund: 0,
+    dividendsForeignFund: 0,
+    dividendsNoCredit: 0,
     dividendMode: "noDeclare",
-    capitalGain: 0,
-    declareCapitalGain: false,
+    accounts: [],
     lossCarryforward: 0,
+    foreignIncome: 0,
+    foreignTaxPaid: 0,
   },
-  housingLoan: { creditAmount: 0, movedIn2026OrLater: false },
+  housingLoan: { creditAmount: 0, movedIn2026OrLater: false, specificAcquisition: false },
 });

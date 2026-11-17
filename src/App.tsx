@@ -40,6 +40,23 @@ function App() {
     return () => clearTimeout(t);
   }, [input]);
 
+  // リセットは2回押して実行する（1回目で確認表示に変わり、数秒で元に戻る）
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  useEffect(() => {
+    if (!confirmingReset) return;
+    const t = setTimeout(() => setConfirmingReset(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmingReset]);
+  const onReset = () => {
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      return;
+    }
+    setConfirmingReset(false);
+    setInputState(defaultInput());
+    flash("入力をリセットしました");
+  };
+
   const flash = (m: string) => {
     setMessage(m);
     setTimeout(() => setMessage(null), 3000);
@@ -78,8 +95,8 @@ function App() {
           {message && <span className="toast">{message}</span>}
           <button type="button" onClick={onLoad}>読込</button>
           <button type="button" onClick={onSave}>保存</button>
-          <button type="button" className="ghost" onClick={() => setInputState(defaultInput())}>
-            リセット
+          <button type="button" className={confirmingReset ? "ghost confirm" : "ghost"} onClick={onReset}>
+            {confirmingReset ? "もう一度押すと消去" : "リセット"}
           </button>
         </div>
       </header>

@@ -71,8 +71,9 @@ async fn load_scenario(window: Window) -> Result<Option<TaxInput>, String> {
         .fs()
         .read_to_string(path)
         .map_err(|e| format!("読み込みに失敗しました: {e}"))?;
-    serde_json::from_str(&text)
-        .map(Some)
+    // 旧形式の項目（合算の譲渡損益など）は現在の形式に直して画面に渡す
+    serde_json::from_str::<TaxInput>(&text)
+        .map(|input| Some(input.normalized()))
         .map_err(|e| format!("ファイル形式が正しくありません: {e}"))
 }
 
