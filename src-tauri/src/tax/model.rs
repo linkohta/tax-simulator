@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::params::{CARE_RATE, CHILDCARE_SUPPORT_RATE, EMPLOYER_SPLIT, KYOKAI_KENPO_FALLBACK_PREFECTURE, KYOKAI_KENPO_RATES};
+use super::params::{CARE_RATE, CHILDCARE_SUPPORT_RATE, EMPLOYER_SPLIT, KYOKAI_KENPO_FALLBACK_PREFECTURE, KYOKAI_KENPO_RATES, TAX_YEAR};
 
 // ───────────────────────────── 入力 ─────────────────────────────
 
@@ -319,16 +319,67 @@ impl TaxInput {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HousingLoanMode {
+    /// 控除可能額を入力する
+    #[default]
+    Manual,
+    /// 年末残高・居住開始年・住宅の区分から計算する
+    Auto,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HousingType {
+    /// 認定長期優良住宅・認定低炭素住宅
+    Certified,
+    /// ZEH水準省エネ住宅
+    Zeh,
+    /// 省エネ基準適合住宅
+    #[default]
+    EnergySaving,
+    /// その他の住宅
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct HousingLoanInput {
-    /// 住宅借入金等特別控除の控除可能額（年末残高×0.7% などで計算済みの額）
+    pub mode: HousingLoanMode,
+    /// Auto 時：住宅借入金等の年末残高（自分の持分・居住用部分に対応する額）
+    pub year_end_balance: i64,
+    /// Auto 時：居住を開始した年（西暦）
+    pub move_in_year: u32,
+    /// Auto 時：住宅の区分
+    pub housing_type: HousingType,
+    /// Auto 時：中古（既存住宅）か。false は新築・買取再販
+    pub existing_house: bool,
+    /// Auto 時：特例対象個人（居住年の年末に、19歳未満の扶養親族がいる、または夫婦のどちらかが40歳未満）
+    pub child_rearing: bool,
+    /// Manual 時：住宅借入金等特別控除の控除可能額（年末残高×0.7% などで計算済みの額）
     pub credit_amount: i64,
     /// 令和8年以後に居住を開始した（住民税の控除限度額の計算が異なる）
     pub moved_in_2026_or_later: bool,
     /// 住民税の控除限度額が7%・136,500円になる入居
     /// （平成26年4月〜令和3年12月入居で消費税率8%・10%の特定取得など）
     pub specific_acquisition: bool,
+}
+
+impl Default for HousingLoanInput {
+    fn default() -> Self {
+        Self {
+            mode: HousingLoanMode::Manual,
+            year_end_balance: 0,
+            move_in_year: TAX_YEAR,
+            housing_type: HousingType::default(),
+            existing_house: false,
+            child_rearing: false,
+            credit_amount: 0,
+            moved_in_2026_or_later: false,
+            specific_acquisition: false,
+        }
+    }
 }
 
 // ───────────────────────────── 出力 ─────────────────────────────

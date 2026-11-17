@@ -9,6 +9,7 @@ import {
   yen,
 } from "./Fields";
 import { DependentInput, TaxInput, newDependent } from "../types";
+import { HousingLoanSection } from "./sections/HousingLoanSection";
 import { StockSection } from "./sections/StockSection";
 
 type Props = {
@@ -442,7 +443,7 @@ export function InputForm({ input, setInput, prefectures }: Props) {
         </div>
       </Section>
 
-      <Section title="医療費・住宅ローン控除">
+      <Section title="医療費控除">
         <Select
           label="医療費の控除方式"
           value={med.mode}
@@ -460,29 +461,9 @@ export function InputForm({ input, setInput, prefectures }: Props) {
         ) : (
           <MoneyInput label="特定一般用医薬品等の購入費" value={med.otcPurchases} onChange={(otcPurchases) => setMed({ otcPurchases })} />
         )}
-        <MoneyInput
-          label="住宅借入金等特別控除の額"
-          value={input.housingLoan.creditAmount}
-          onChange={(creditAmount) => setHl({ creditAmount })}
-          hint="年末残高×控除率（0.7%等）で計算済みの控除可能額。所得税で引ききれない分は住民税から控除"
-        />
-        {input.housingLoan.creditAmount > 0 && (
-          <Check
-            label="2026年以後に居住を開始した"
-            checked={input.housingLoan.movedIn2026OrLater}
-            onChange={(movedIn2026OrLater) => setHl({ movedIn2026OrLater })}
-            hint="住民税から控除できる限度額の計算方法が異なります"
-          />
-        )}
-        {input.housingLoan.creditAmount > 0 && !input.housingLoan.movedIn2026OrLater && (
-          <Check
-            label="2014年4月〜2021年12月に居住を開始し、消費税率8%・10%で取得した"
-            checked={input.housingLoan.specificAcquisition}
-            onChange={(specificAcquisition) => setHl({ specificAcquisition })}
-            hint="住民税から控除できる限度額が7%（最高136,500円）になります。それ以外は5%（最高97,500円）"
-          />
-        )}
       </Section>
+
+      <HousingLoanSection housingLoan={input.housingLoan} setHl={setHl} />
 
       <StockSection stocks={input.stocks} setStock={setStock} />
     </div>

@@ -63,6 +63,21 @@ export interface StockOption {
   isBest: boolean;
 }
 
+export type HousingLoanMode = "manual" | "auto";
+export type HousingType = "certified" | "zeh" | "energySaving" | "other";
+
+export interface HousingLoanInput {
+  mode: HousingLoanMode;
+  yearEndBalance: number;
+  moveInYear: number;
+  housingType: HousingType;
+  existingHouse: boolean;
+  childRearing: boolean;
+  creditAmount: number;
+  movedIn2026OrLater: boolean;
+  specificAcquisition: boolean;
+}
+
 export interface TaxInput {
   age: number;
   salary: { annualIncome: number };
@@ -116,7 +131,7 @@ export interface TaxInput {
     otherResidentDesignated: number;
   };
   stocks: StockInput;
-  housingLoan: { creditAmount: number; movedIn2026OrLater: boolean; specificAcquisition: boolean };
+  housingLoan: HousingLoanInput;
 }
 
 export interface DeductionItem {
@@ -267,5 +282,15 @@ export const defaultInput =(): TaxInput => ({
     foreignIncome: 0,
     foreignTaxPaid: 0,
   },
-  housingLoan: { creditAmount: 0, movedIn2026OrLater: false, specificAcquisition: false },
+  housingLoan: {
+    mode: "manual",
+    yearEndBalance: 0,
+    moveInYear: 2026,
+    housingType: "energySaving",
+    existingHouse: false,
+    childRearing: false,
+    creditAmount: 0,
+    movedIn2026OrLater: false,
+    specificAcquisition: false,
+  },
 });
