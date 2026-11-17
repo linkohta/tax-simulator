@@ -31,7 +31,8 @@ function useColors(): Colors {
   return colors;
 }
 
-const man = (n: number) => `${(n / 10_000).toLocaleString("ja-JP")}万`;
+/** 万円単位の表記（小数1桁まで。例：1,134,567 → 113.5万） */
+const man = (n: number) => `${(n / 10_000).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}万`;
 
 type TooltipProps = { active?: boolean; payload?: { payload: CurvePoint }[] };
 
