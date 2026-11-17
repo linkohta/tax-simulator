@@ -3,6 +3,7 @@ import {
   DISABILITY_OPTIONS,
   MoneyInput,
   NumberInput,
+  RateInput,
   Section,
   Select,
   yen,
@@ -76,7 +77,7 @@ export function InputForm({ input, setInput, prefectures }: Props) {
           value={si.mode}
           onChange={(mode) => setSi({ mode })}
           options={[
-            { value: "auto", label: "給与から概算する（協会けんぽ・厚生年金）" },
+            { value: "auto", label: "給与から概算する（健康保険・厚生年金）" },
             { value: "manual", label: "金額を入力する（源泉徴収票の社会保険料等の金額）" },
           ]}
         />
@@ -88,13 +89,45 @@ export function InputForm({ input, setInput, prefectures }: Props) {
           />
         ) : (
           <>
+            <Select
+              label="健康保険の種類"
+              value={si.healthPlan}
+              onChange={(healthPlan) => setSi({ healthPlan })}
+              options={[
+                { value: "kyokai", label: "協会けんぽ（都道府県別の料率）" },
+                { value: "custom", label: "健康保険組合など（料率を入力する）" },
+              ]}
+            />
+            {si.healthPlan === "custom" && (
+              <div className="grid">
+                <RateInput
+                  label="健康保険料率（本人負担分）"
+                  value={si.customHealthRateX1000}
+                  onChange={(customHealthRateX1000) => setSi({ customHealthRateX1000 })}
+                  hint="加入している健保の保険料率表の「被保険者負担」の率"
+                />
+                <RateInput
+                  label="介護保険料率（本人負担分）"
+                  value={si.customCareRateX1000}
+                  onChange={(customCareRateX1000) => setSi({ customCareRateX1000 })}
+                  hint="40〜64歳のときだけ計算に使います"
+                />
+                <RateInput
+                  label="子ども・子育て支援金率（本人負担分）"
+                  value={si.customChildcareSupportRateX1000}
+                  onChange={(customChildcareSupportRateX1000) => setSi({ customChildcareSupportRateX1000 })}
+                />
+              </div>
+            )}
             <div className="grid">
-              <Select
-                label="協会けんぽ 都道府県"
-                value={si.prefecture}
-                onChange={(prefecture) => setSi({ prefecture })}
-                options={prefectures.map((p) => ({ value: p, label: p }))}
-              />
+              {si.healthPlan === "kyokai" && (
+                <Select
+                  label="協会けんぽ 都道府県"
+                  value={si.prefecture}
+                  onChange={(prefecture) => setSi({ prefecture })}
+                  options={prefectures.map((p) => ({ value: p, label: p }))}
+                />
+              )}
               <MoneyInput
                 label="月額給与（報酬月額）"
                 value={si.monthlySalary}
