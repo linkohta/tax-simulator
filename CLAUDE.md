@@ -6,7 +6,7 @@
 
 | 層 | 技術 |
 |---|---|
-| アプリ基盤 | Tauri 2（`tauri-plugin-dialog`, `tauri-plugin-fs`, `tauri-plugin-opener`） |
+| アプリ基盤 | Tauri 2（`tauri-plugin-dialog`, `tauri-plugin-fs`） |
 | 計算エンジン | Rust（edition 2021）、serde / serde_json |
 | 画面 | React 19 + TypeScript + Vite（UIライブラリなし、素の CSS） |
 
@@ -148,7 +148,6 @@ src-tauri/gen/android/  Android プロジェクト（手を加えているので
 |---|---|---|
 | `tax/mod.rs` の `compute()` | 約400行で、所得・株式・所得税・住民税の計算が一体になっている | `income.rs`（給与・株式）、`income_tax.rs`、`resident_tax.rs` に分け、`compute()` は組み立てるだけにする |
 | 年度パラメータ | `params.rs` の定数がグローバル | `struct TaxYearParams` にまとめ、計算に引数で渡す（複数年度に対応しやすくする） |
-| `deductions.rs` の障害者控除 | 配偶者・扶養親族・本人の3か所に似た `match` がある | `fn disability_deduction(Disability, Kind)` に共通化する |
 | 型の同期 | `types.ts` を手作業で同期している | `ts-rs` や `specta` で Rust から TS 型を生成する |
 | `InputForm.tsx` | 全セクションが1ファイル（約500行） | セクションごとのコンポーネント（`components/sections/*.tsx`）に分ける |
 | ふるさと納税の上限探索 | `compute()` を二分探索で約20回呼ぶ | 寄附に依存しない部分を前計算して再利用する（速度が問題になってから着手） |
