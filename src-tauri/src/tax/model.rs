@@ -395,8 +395,22 @@ pub struct TaxResult {
     pub furusato: FurusatoResult,
     /// 株式の課税方式ごとの税額（配当も源泉徴収ありの口座の損益もなければ空）
     pub stock_options: Vec<StockOption>,
+    /// 控除ごとの節税額（効果のあるものだけ）
+    pub savings: Vec<SavingItem>,
     pub summary: Summary,
     pub warnings: Vec<String>,
+}
+
+/// ある控除がなかった場合と比べて減っている税額
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavingItem {
+    pub label: String,
+    /// 所得税及び復興特別所得税の減少額
+    pub income_tax: i64,
+    /// 住民税の減少額
+    pub resident_tax: i64,
+    pub total: i64,
 }
 
 /// 株式の課税方式を1つ選んだときの税額

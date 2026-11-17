@@ -412,6 +412,38 @@ fn housing_loan_auto_calculation() {
 }
 
 #[test]
+fn deduction_savings() {
+    // 入力がなければ空
+    assert!(calculate(&single(5_000_000, 750_000)).savings.is_empty());
+
+    // iDeCo 27.6万：
+    //   所得税 課税所得 177万 → 149.4万 × 5% = 74,700、復興税 1,568 → 76,200（90,300 から 14,100 減）
+    //   住民税 課税所得 238万 → 210.4万 → 市 126,240 − 1,500 = 124,740 → 124,700、
+    //          県 84,160 − 1,000 = 83,160 → 83,100。計 207,800（235,500 から 27,700 減）
+    let mut input = single(5_000_000, 750_000);
+    input.pension_savings.ideco = 276_000;
+    let r = calculate(&input);
+    assert_eq!(r.savings.len(), 1);
+    let s = &r.savings[0];
+    assert_eq!(s.label, "iDeCo・小規模企業共済等");
+    assert_eq!((s.income_tax, s.resident_tax, s.total), (14_100, 27_700, 41_800));
+
+    // 生命保険料と地震保険料は別々に出る。足切り以下の医療費は出ない
+    input.insurance.life_new = 80_000;
+    input.insurance.earthquake = 20_000;
+    input.medical.expenses = 50_000;
+    let labels: Vec<String> = calculate(&input).savings.into_iter().map(|s| s.label).collect();
+    assert_eq!(labels, ["iDeCo・小規模企業共済等", "生命保険料控除", "地震保険料控除"]);
+
+    // 住宅ローン控除 20万：所得税 88,500 と住民税 97,500 が減る（housing_loan_spills_over_to_resident_tax と同じ例）
+    let mut input = single(5_000_000, 750_000);
+    input.housing_loan.credit_amount = 200_000;
+    let r = calculate(&input);
+    let s = &r.savings[0];
+    assert_eq!((s.label.as_str(), s.income_tax, s.resident_tax), ("住宅ローン控除", 90_300, 97_500));
+}
+
+#[test]
 fn minimum_tax_warning_threshold() {
     // 給与所得 = 収入 − 195万。基準所得金額 3.3億円ちょうどでは警告しない
     let warned = |salary: i64| calculate(&single(salary, 0)).warnings.iter().any(|w| w.contains("負担の適正化措置"));
