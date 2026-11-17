@@ -228,6 +228,26 @@ mod tests {
     }
 
     #[test]
+    fn bonus_caps() {
+        let input = SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![3_000_000, 3_000_000], ..Default::default() };
+        let s = estimate(&input, 35);
+        // 健保：標準賞与額は年度累計573万円まで。1回目 300万×4.925% = 147,750、
+        //       2回目は残り273万×4.925% = 134,452.5 → 50銭以下切捨てで 134,452
+        assert_eq!(s.health, 14_775 * 12 + 147_750 + 134_452);
+        // 厚年：1回あたり150万円まで。150万×9.15% = 137,250 が2回
+        assert_eq!(s.pension, 27_450 * 12 + 137_250 * 2);
+        // 雇用保険に上限はない：300万×5/1000 = 15,000 が2回
+        assert_eq!(s.employment, 1_500 * 12 + 15_000 * 2);
+
+        // 上限ちょうどと1,000円超
+        let one = |b: i64| estimate(&SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![b], ..Default::default() }, 35);
+        assert_eq!(one(1_500_000).pension, one(1_501_000).pension);
+        assert_eq!(one(5_730_000).health, one(5_731_000).health);
+        // 標準賞与額は1,000円未満切捨て
+        assert_eq!(one(700_999).health, one(700_000).health);
+    }
+
+    #[test]
     fn rounding() {
         // 300,000 × 18.3% / 2 = 27,450
         assert_eq!(employee_share(300_000, 18_300), 27_450);

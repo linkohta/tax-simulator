@@ -48,6 +48,127 @@ fn single_5m() {
 }
 
 #[test]
+fn income_tax_brackets() {
+    // 速算表の各区分の上端（課税所得は1,000円単位）と、次の区分の下端
+    let t = progressive_income_tax;
+    assert_eq!((t(1_949_000), t(1_950_000)), (97_450, 97_500));
+    assert_eq!((t(3_299_000), t(3_300_000)), (232_400, 232_500));
+    assert_eq!((t(6_949_000), t(6_950_000)), (962_300, 962_500));
+    assert_eq!((t(8_999_000), t(9_000_000)), (1_433_770, 1_434_000));
+    assert_eq!((t(17_999_000), t(18_000_000)), (4_403_670, 4_404_000));
+    assert_eq!((t(39_999_000), t(40_000_000)), (13_203_600, 13_204_000));
+    assert_eq!(t(0), 0);
+}
+
+#[test]
+fn adjustment_credit_under_2m() {
+    // 給与300万 → 給与所得 300万 − (300万×30% + 8万) = 202万
+    let r = calculate(&single(3_000_000, 450_000));
+    assert_eq!(r.income.salary_net, 2_020_000);
+    // 所得税：202万 − 45万 − 基礎控除104万 = 53万 × 5% = 26,500、復興税 556 → 27,000
+    assert_eq!(r.income_tax.taxable_ordinary, 530_000);
+    assert_eq!(r.income_tax.total, 27_000);
+    // 住民税：202万 − 45万 − 43万 = 114万 × 10% = 114,000
+    // 調整控除（課税所得200万円以下）：min(人的控除差5万, 114万) × 5% = 2,500
+    assert_eq!(r.resident_tax.taxable_ordinary, 1_140_000);
+    assert_eq!(r.resident_tax.income_levy, 111_500);
+    assert_eq!(r.resident_tax.total, 116_500);
+}
+
+#[test]
+fn adjustment_credit_over_2m_with_family() {
+    // 給与600万 → 給与所得 600万 − (600万×20% + 44万) = 436万
+    let mut input = single(6_000_000, 1_000_000);
+    input.family.has_spouse = true;
+    input.family.spouse.age = 40;
+    input.family.dependents = vec![DependentInput { age: 20, ..Default::default() }];
+    let r = calculate(&input);
+    assert_eq!(r.income.salary_net, 4_360_000);
+    // 所得税：436万 − 社保100万 − 基礎104万 − 配偶者38万 − 特定扶養63万 = 131万 × 5% = 65,500
+    //         復興税 1,375 → 66,800
+    assert_eq!(r.income_tax.taxable_ordinary, 1_310_000);
+    assert_eq!(r.income_tax.total, 66_800);
+    // 住民税：436万 − 100万 − 43万 − 33万 − 45万 = 215万 → 市 129,000・県 86,000
+    // 調整控除（200万円超）：{人的控除差 28万（基礎5+配偶者5+特定18） − (215万 − 200万)} × 5% = 6,500
+    //   → 市 3,900・県 2,600
+    assert_eq!(r.resident_tax.taxable_ordinary, 2_150_000);
+    assert!(r.resident_tax.credits.iter().any(|c| c.label == "調整控除" && c.amount == 6_500));
+    assert_eq!(r.resident_tax.income_levy, 208_500);
+}
+
+#[test]
+fn resident_tax_exemption_single() {
+    // 扶養なし：合計所得45万円以下は均等割・所得割とも非課税。給与119万 − 74万 = 45万
+    let r = calculate(&single(1_190_000, 0));
+    assert!(r.resident_tax.per_capita_exempt && r.resident_tax.income_levy_exempt);
+    assert_eq!(r.resident_tax.total, 0);
+    // 1円超えると課税：課税所得 450,001 − 43万 = 2万 → 2,000 − 調整控除 1,000 = 1,000、均等割 5,000
+    let r = calculate(&single(1_190_001, 0));
+    assert!(!r.resident_tax.per_capita_exempt && !r.resident_tax.income_levy_exempt);
+    assert_eq!((r.resident_tax.income_levy, r.resident_tax.per_capita), (1_000, 5_000));
+    assert_eq!(r.income_tax.total, 0);
+}
+
+#[test]
+fn resident_tax_exemption_with_family() {
+    // 配偶者と子1人（本人を含め3人）：均等割の限度 35万×3+10万+21万 = 136万、所得割の限度 35万×3+10万+32万 = 147万
+    let family = |salary: i64| {
+        let mut input = single(salary, 0);
+        input.family.has_spouse = true;
+        input.family.spouse.age = 40;
+        input.family.dependents = vec![DependentInput { age: 10, ..Default::default() }];
+        calculate(&input).resident_tax
+    };
+    // 給与210万 − 74万 = 136万：非課税
+    assert_eq!(family(2_100_000).total, 0);
+    // 1円超えると均等割だけ課税
+    let r = family(2_100_001);
+    assert!(!r.per_capita_exempt && r.income_levy_exempt);
+    assert_eq!(r.total, 5_000);
+    // 給与221.2万 → 所得 1,468,400（147万以下）：所得割は非課税
+    assert!(family(2_212_000).income_levy_exempt);
+    // 給与221.6万 → 所得 1,471,200：所得割も課税
+    //   課税所得 1,471,200 − 43万 − 配偶者33万 = 711,000 → 市 42,660・県 28,440
+    //   調整控除 min(人的控除差10万, 71.1万) × 5% → 市 3,000・県 2,000
+    //   市 39,660 → 39,600、県 26,440 → 26,400
+    let r = family(2_216_000);
+    assert!(!r.income_levy_exempt);
+    assert_eq!((r.income_levy, r.total), (66_000, 71_000));
+}
+
+#[test]
+fn resident_tax_exemption_for_disabled() {
+    // 障害者・未成年者・寡婦・ひとり親は合計所得135万円以下で非課税。給与209万 − 74万 = 135万
+    let disabled = |salary: i64| {
+        let mut input = single(salary, 0);
+        input.family.self_disability = Disability::General;
+        calculate(&input).resident_tax
+    };
+    assert_eq!(disabled(2_090_000).total, 0);
+    assert!(disabled(2_090_001).total > 0);
+}
+
+#[test]
+fn other_donations() {
+    // 所得税のみ対象の寄附10万：寄附金控除 98,000 → 課税所得 1,672,000 × 5% = 83,600、復興税 1,755 → 85,300
+    let mut input = single(5_000_000, 750_000);
+    input.donations.other_income_tax_only = 100_000;
+    let r = calculate(&input);
+    assert_eq!(r.income_tax.taxable_ordinary, 1_672_000);
+    assert_eq!(r.income_tax.total, 85_300);
+    assert_eq!(r.resident_tax.total, 240_500, "住民税は変わらない");
+    assert!(r.summary.filing_required);
+
+    // 条例指定の寄附10万：住民税の基本分 (10万 − 2,000) × 10% → 市 5,880・県 3,920
+    //   市 141,300 − 5,880 = 135,420 → 135,400、県 94,200 − 3,920 = 90,280 → 90,200
+    let mut input = single(5_000_000, 750_000);
+    input.donations.other_resident_designated = 100_000;
+    let r = calculate(&input);
+    assert_eq!(r.income_tax.total, 85_300);
+    assert_eq!(r.resident_tax.income_levy, 225_600);
+}
+
+#[test]
 fn furusato_one_stop() {
     let mut input = single(5_000_000, 750_000);
     input.donations.furusato = vec![FurusatoEntry { name: "A".into(), amount: 50_000 }];
