@@ -35,10 +35,27 @@ pub fn salary_net(income: i64, kind: Kind) -> i64 {
         1_950_000
     };
     if formula <= min {
-        (income - min).max(0)
+        // 最低保障額が適用される範囲。端数表の上限（220万円）からは別表第五の4,000円刻みに入るので、
+        // 収入そのものではなく刻みの下端 a から引く（例：2,203,999円 → 2,200,000 − 740,000）
+        let step_from = SALARY_NET_SPECIAL.last().map_or(i64::MAX, |r| r.1);
+        let base = if income >= step_from { a } else { income };
+        (base - min).max(0)
     } else {
         a - formula
     }
+}
+
+/// 所得金額調整控除（子ども・特別障害者等を有する者等）
+///
+/// (給与収入（上限1,000万円）− 850万円) × 10%。1円未満の端数は切上げ。
+/// `eligible` は、本人が特別障害者、23歳未満の扶養親族がいる、
+/// 特別障害者の同一生計配偶者・扶養親族がいる、のいずれかに当たるか。
+pub fn income_adjustment(salary: i64, eligible: bool) -> i64 {
+    if !eligible || salary <= INCOME_ADJUSTMENT_FROM {
+        return 0;
+    }
+    let over = salary.min(INCOME_ADJUSTMENT_SALARY_CAP) - INCOME_ADJUSTMENT_FROM;
+    ceil_div(over * INCOME_ADJUSTMENT_RATE_PCT, 100)
 }
 
 /// 給与所得控除額（収入−給与所得）
@@ -392,6 +409,220 @@ mod tests {
         assert_eq!(life_new_it(60_000, 60_000), 45_000);
         assert_eq!(life_new_it(120_000, 60_000), 60_000);
         assert_eq!(life_new_it(200_000, 60_000), 60_000);
+    }
+
+    #[test]
+    fn salary_net_around_step_table_start() {
+        // 219.1万円未満は 収入 − 74万円
+        assert_eq!(salary_net(2_190_999, Kind::IncomeTax), 1_450_999);
+        // 220万円からは4,000円刻み：220万〜220.4万円未満はすべて 220万 − 74万 = 146万
+        assert_eq!(salary_net(2_200_000, Kind::IncomeTax), 1_460_000);
+        assert_eq!(salary_net(2_200_001, Kind::IncomeTax), 1_460_000);
+        assert_eq!(salary_net(2_203_999, Kind::IncomeTax), 1_460_000);
+        // 220.4万 − (220.4万×30% + 8万) = 1,462,800
+        assert_eq!(salary_net(2_204_000, Kind::IncomeTax), 1_462_800);
+        assert_eq!(salary_net(2_203_999, Kind::Resident), 1_460_000);
+    }
+
+    #[test]
+    fn income_adjustment_boundaries() {
+        assert_eq!(income_adjustment(8_500_000, true), 0);
+        // 1円 × 10% = 0.1 → 切上げで1円
+        assert_eq!(income_adjustment(8_500_001, true), 1);
+        assert_eq!(income_adjustment(8_500_010, true), 1);
+        assert_eq!(income_adjustment(8_500_011, true), 2);
+        assert_eq!(income_adjustment(9_000_000, true), 50_000);
+        // 収入は1,000万円まで
+        assert_eq!(income_adjustment(10_000_000, true), 150_000);
+        assert_eq!(income_adjustment(12_000_000, true), 150_000);
+        assert_eq!(income_adjustment(12_000_000, false), 0);
+    }
+
+    #[test]
+    fn life_old_and_combined() {
+        // 旧契約（所得税）：2.5万以下全額、5万以下 x/2+1.25万、10万以下 x/4+2.5万、上限5万
+        assert_eq!(life_old_it(25_000), 25_000);
+        assert_eq!(life_old_it(50_000), 37_500);
+        assert_eq!(life_old_it(100_000), 50_000);
+        assert_eq!(life_old_it(100_001), 50_000);
+        // 1円未満切上げ：20,001/2 = 10,000.5 → 10,001 + 10,000
+        assert_eq!(life_new_it(20_001, 40_000), 20_001);
+        // 新旧両方：旧だけの額（5万）と、新＋旧の合計（上限4万）の大きい方
+        let ins = InsurancePremiumInput { life_new: 80_000, life_old: 100_000, ..Default::default() };
+        assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 50_000);
+        // 新4万 + 旧2万 = 6万 → 上限4万
+        let ins = InsurancePremiumInput { life_new: 80_000, life_old: 20_000, ..Default::default() };
+        assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 40_000);
+        // 住民税：新 1.2万以下全額、3.2万以下 x/2+6千、5.6万以下 x/4+1.4万
+        assert_eq!(life_new_rt(12_000), 12_000);
+        assert_eq!(life_new_rt(32_000), 22_000);
+        // 住民税：旧 1.5万以下全額、4万以下 x/2+7.5千、7万以下 x/4+1.75万
+        assert_eq!(life_old_rt(15_000), 15_000);
+        assert_eq!(life_old_rt(40_000), 27_500);
+    }
+
+    #[test]
+    fn earthquake() {
+        let ins = |earthquake, old_long_term| InsurancePremiumInput { earthquake, old_long_term, ..Default::default() };
+        // 所得税：地震は全額（上限5万）。旧長期は1万以下全額、2万以下 x/2+5千、上限1.5万。合計の上限5万
+        assert_eq!(earthquake_insurance(&ins(50_000, 0), Kind::IncomeTax), 50_000);
+        assert_eq!(earthquake_insurance(&ins(60_000, 0), Kind::IncomeTax), 50_000);
+        assert_eq!(earthquake_insurance(&ins(0, 10_000), Kind::IncomeTax), 10_000);
+        assert_eq!(earthquake_insurance(&ins(0, 15_000), Kind::IncomeTax), 12_500);
+        assert_eq!(earthquake_insurance(&ins(0, 20_000), Kind::IncomeTax), 15_000);
+        assert_eq!(earthquake_insurance(&ins(0, 30_000), Kind::IncomeTax), 15_000);
+        assert_eq!(earthquake_insurance(&ins(40_000, 20_000), Kind::IncomeTax), 50_000);
+        // 住民税：地震は1/2（上限2.5万）。旧長期は5千以下全額、1.5万以下 x/2+2.5千、上限1万。合計の上限2.5万
+        assert_eq!(earthquake_insurance(&ins(30_000, 0), Kind::Resident), 15_000);
+        assert_eq!(earthquake_insurance(&ins(50_000, 0), Kind::Resident), 25_000);
+        assert_eq!(earthquake_insurance(&ins(0, 5_000), Kind::Resident), 5_000);
+        assert_eq!(earthquake_insurance(&ins(0, 10_000), Kind::Resident), 7_500);
+        assert_eq!(earthquake_insurance(&ins(0, 15_000), Kind::Resident), 10_000);
+        assert_eq!(earthquake_insurance(&ins(0, 20_000), Kind::Resident), 10_000);
+        assert_eq!(earthquake_insurance(&ins(40_000, 20_000), Kind::Resident), 25_000);
+    }
+
+    #[test]
+    fn medical_thresholds() {
+        let m = |expenses, reimbursed| MedicalInput { expenses, reimbursed, ..Default::default() };
+        // 総所得金額等200万円以上は10万円を引く
+        assert_eq!(medical(&m(300_000, 50_000), 3_000_000), 150_000);
+        assert_eq!(medical(&m(300_000, 50_000), 2_000_000), 150_000);
+        // 200万円未満は5%：1,999,999×5% = 99,999
+        assert_eq!(medical(&m(300_000, 50_000), 1_999_999), 150_001);
+        assert_eq!(medical(&m(300_000, 50_000), 1_500_000), 175_000);
+        // 足切り以下は0、上限は200万円
+        assert_eq!(medical(&m(100_000, 0), 3_000_000), 0);
+        assert_eq!(medical(&m(2_500_000, 0), 3_000_000), 2_000_000);
+        // セルフメディケーション：1.2万円を超える部分、上限8.8万円
+        let s = |otc_purchases| MedicalInput { mode: MedicalMode::SelfMedication, otc_purchases, ..Default::default() };
+        assert_eq!(medical(&s(12_000), 3_000_000), 0);
+        assert_eq!(medical(&s(12_001), 3_000_000), 1);
+        assert_eq!(medical(&s(100_000), 3_000_000), 88_000);
+        assert_eq!(medical(&s(150_000), 3_000_000), 88_000);
+    }
+
+    #[test]
+    fn basic_deduction_tiers() {
+        let it = |x| basic_deduction(x, Kind::IncomeTax);
+        assert_eq!((it(4_890_000), it(4_890_001)), (1_040_000, 670_000));
+        assert_eq!((it(6_550_000), it(6_550_001)), (670_000, 620_000));
+        assert_eq!((it(23_500_000), it(23_500_001)), (620_000, 480_000));
+        assert_eq!((it(24_000_000), it(24_000_001)), (480_000, 320_000));
+        assert_eq!((it(24_500_000), it(24_500_001)), (320_000, 160_000));
+        assert_eq!((it(25_000_000), it(25_000_001)), (160_000, 0));
+        let rt = |x| basic_deduction(x, Kind::Resident);
+        assert_eq!((rt(24_000_000), rt(24_000_001)), (430_000, 290_000));
+        assert_eq!((rt(24_500_000), rt(24_500_001)), (290_000, 150_000));
+        assert_eq!((rt(25_000_000), rt(25_000_001)), (150_000, 0));
+    }
+
+    /// 人的控除のうち、基礎控除を除いた (所得税, 住民税, 人的控除差) を返す
+    fn personal_of(family: &FamilyInput, total_income: i64) -> (i64, i64, i64) {
+        let ctx = FamilyContext { family, total_income };
+        let it = ctx.personal(Kind::IncomeTax);
+        let rt = ctx.personal(Kind::Resident);
+        (
+            it.total - basic_deduction(total_income, Kind::IncomeTax),
+            rt.total - basic_deduction(total_income, Kind::Resident),
+            rt.personal_diff - PERSONAL_DIFF_BASIC,
+        )
+    }
+
+    #[test]
+    fn spouse_by_taxpayer_income() {
+        let mut f = FamilyInput { has_spouse: true, spouse: SpouseInput { age: 40, ..Default::default() }, ..Default::default() };
+        // 納税者の合計所得 900万・950万・1,000万の境界
+        assert_eq!(personal_of(&f, 9_000_000), (380_000, 330_000, 50_000));
+        assert_eq!(personal_of(&f, 9_000_001), (260_000, 220_000, 40_000));
+        assert_eq!(personal_of(&f, 9_500_000), (260_000, 220_000, 40_000));
+        assert_eq!(personal_of(&f, 9_500_001), (130_000, 110_000, 20_000));
+        assert_eq!(personal_of(&f, 10_000_000), (130_000, 110_000, 20_000));
+        assert_eq!(personal_of(&f, 10_000_001), (0, 0, 0));
+        // 老人控除対象配偶者（70歳以上）
+        f.spouse.age = 69;
+        assert_eq!(personal_of(&f, 5_000_000), (380_000, 330_000, 50_000));
+        f.spouse.age = 70;
+        assert_eq!(personal_of(&f, 5_000_000), (480_000, 380_000, 100_000));
+    }
+
+    #[test]
+    fn spouse_special_by_spouse_income() {
+        let f = |other_income| FamilyInput {
+            has_spouse: true,
+            spouse: SpouseInput { age: 40, other_income, ..Default::default() },
+            ..Default::default()
+        };
+        // 配偶者の合計所得 62万以下は配偶者控除、超えると配偶者特別控除（人的控除差なし）
+        assert_eq!(personal_of(&f(620_000), 5_000_000), (380_000, 330_000, 50_000));
+        assert_eq!(personal_of(&f(620_001), 5_000_000), (380_000, 330_000, 0));
+        assert_eq!(personal_of(&f(950_000), 5_000_000), (380_000, 330_000, 0));
+        assert_eq!(personal_of(&f(950_001), 5_000_000), (360_000, 330_000, 0));
+        assert_eq!(personal_of(&f(1_000_001), 5_000_000), (310_000, 310_000, 0));
+        assert_eq!(personal_of(&f(1_330_000), 5_000_000), (30_000, 30_000, 0));
+        assert_eq!(personal_of(&f(1_330_001), 5_000_000), (0, 0, 0));
+        // 納税者の所得区分でも減る
+        assert_eq!(personal_of(&f(950_001), 9_000_001), (240_000, 220_000, 0));
+        assert_eq!(personal_of(&f(950_001), 10_000_001), (0, 0, 0));
+    }
+
+    #[test]
+    fn dependents_by_age_and_income() {
+        let f = |age, other_income, cohabiting_parent| FamilyInput {
+            dependents: vec![DependentInput { age, other_income, cohabiting_parent, ..Default::default() }],
+            ..Default::default()
+        };
+        let p = |age| personal_of(&f(age, 0, false), 5_000_000);
+        // 16歳未満は控除なし、16〜18歳は一般、19〜22歳は特定、23〜69歳は一般、70歳以上は老人
+        assert_eq!(p(15), (0, 0, 0));
+        assert_eq!(p(16), (380_000, 330_000, 50_000));
+        assert_eq!(p(18), (380_000, 330_000, 50_000));
+        assert_eq!(p(19), (630_000, 450_000, 180_000));
+        assert_eq!(p(22), (630_000, 450_000, 180_000));
+        assert_eq!(p(23), (380_000, 330_000, 50_000));
+        assert_eq!(p(69), (380_000, 330_000, 50_000));
+        assert_eq!(p(70), (480_000, 380_000, 100_000));
+        assert_eq!(personal_of(&f(70, 0, true), 5_000_000), (580_000, 450_000, 130_000));
+        // 所得62万円の境界。19〜22歳は超えても特定親族特別控除（人的控除差なし）
+        assert_eq!(personal_of(&f(30, 620_000, false), 5_000_000), (380_000, 330_000, 50_000));
+        assert_eq!(personal_of(&f(30, 620_001, false), 5_000_000), (0, 0, 0));
+        assert_eq!(personal_of(&f(20, 620_001, false), 5_000_000), (630_000, 450_000, 0));
+        assert_eq!(personal_of(&f(20, 850_001, false), 5_000_000), (610_000, 450_000, 0));
+        assert_eq!(personal_of(&f(20, 950_001, false), 5_000_000), (410_000, 410_000, 0));
+        assert_eq!(personal_of(&f(20, 1_230_000, false), 5_000_000), (30_000, 30_000, 0));
+        assert_eq!(personal_of(&f(20, 1_230_001, false), 5_000_000), (0, 0, 0));
+        // 住民税の非課税判定の人数には16歳未満も数える
+        let ctx = f(10, 0, false);
+        let r = FamilyContext { family: &ctx, total_income: 5_000_000 }.personal(Kind::Resident);
+        assert_eq!((r.household_count, r.has_dependents_for_exemption, r.has_dependent_under_23), (2, true, true));
+    }
+
+    #[test]
+    fn disability_widow_and_student() {
+        let own = |self_disability| FamilyInput { self_disability, ..Default::default() };
+        assert_eq!(personal_of(&own(Disability::General), 5_000_000), (270_000, 260_000, 10_000));
+        assert_eq!(personal_of(&own(Disability::Special), 5_000_000), (400_000, 300_000, 100_000));
+        // 16歳未満の扶養親族でも障害者控除は受けられる
+        let child = |disability| FamilyInput {
+            dependents: vec![DependentInput { age: 10, disability, ..Default::default() }],
+            ..Default::default()
+        };
+        assert_eq!(personal_of(&child(Disability::General), 5_000_000), (270_000, 260_000, 10_000));
+        assert_eq!(personal_of(&child(Disability::Special), 5_000_000), (400_000, 300_000, 100_000));
+        assert_eq!(personal_of(&child(Disability::SpecialCohabiting), 5_000_000), (750_000, 530_000, 220_000));
+
+        // 寡婦・ひとり親：合計所得500万円以下
+        let widow = |widow_status| FamilyInput { widow_status, ..Default::default() };
+        assert_eq!(personal_of(&widow(WidowStatus::Widow), 5_000_000), (270_000, 260_000, 10_000));
+        assert_eq!(personal_of(&widow(WidowStatus::Widow), 5_000_001), (0, 0, 0));
+        assert_eq!(personal_of(&widow(WidowStatus::SingleMother), 5_000_000), (350_000, 300_000, 50_000));
+        assert_eq!(personal_of(&widow(WidowStatus::SingleFather), 5_000_000), (350_000, 300_000, 10_000));
+        assert_eq!(personal_of(&widow(WidowStatus::SingleMother), 5_000_001), (0, 0, 0));
+
+        // 勤労学生：合計所得89万円以下
+        let student = FamilyInput { working_student: true, ..Default::default() };
+        assert_eq!(personal_of(&student, 890_000), (270_000, 260_000, 10_000));
+        assert_eq!(personal_of(&student, 890_001), (0, 0, 0));
     }
 
     #[test]

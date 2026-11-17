@@ -77,11 +77,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
                 && deductions::relative_income(d.salary_income, d.other_income) <= DEPENDENT_INCOME_LIMIT
         });
     let self_special = matches!(fam.self_disability, Disability::Special | Disability::SpecialCohabiting);
-    let adj = if salary > 8_500_000 && (has_under23 || special_disabled_relative || self_special) {
-        (salary.min(10_000_000) - 8_500_000) / 10
-    } else {
-        0
-    };
+    let adj = deductions::income_adjustment(salary, has_under23 || special_disabled_relative || self_special);
     let salary_net_it = (salary - salary_ded_it - adj).max(0);
     let salary_net_rt = (salary - salary_ded_rt - adj).max(0);
 
