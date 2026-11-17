@@ -87,6 +87,12 @@ export interface SavingItem {
   total: number;
 }
 
+export interface MiscIncomeInput {
+  pensionIncome: number;
+  sideRevenue: number;
+  sideExpenses: number;
+}
+
 export interface TaxInput {
   age: number;
   salary: { annualIncome: number };
@@ -141,6 +147,7 @@ export interface TaxInput {
   };
   stocks: StockInput;
   housingLoan: HousingLoanInput;
+  miscIncome: MiscIncomeInput;
 }
 
 export interface DeductionItem {
@@ -154,6 +161,9 @@ export interface TaxResult {
     salaryDeduction: number;
     incomeAdjustmentDeduction: number;
     salaryNet: number;
+    pensionNet: number;
+    sideNet: number;
+    miscIncome: number;
     dividendComprehensive: number;
     dividendSeparate: number;
     capitalGainSeparate: number;
@@ -304,4 +314,5 @@ export const defaultInput =(): TaxInput => ({
     movedIn2026OrLater: false,
     specificAcquisition: false,
   },
+  miscIncome: { pensionIncome: 0, sideRevenue: 0, sideExpenses: 0 },
 });

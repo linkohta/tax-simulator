@@ -473,6 +473,53 @@ fn deduction_savings() {
 }
 
 #[test]
+fn salary_and_public_pension() {
+    // 66歳、給与200万、公的年金200万、社会保険料30万
+    let mut input = single(2_000_000, 300_000);
+    input.age = 66;
+    input.misc_income.pension_income = 2_000_000;
+    let r = calculate(&input);
+    // 給与所得 200万 − 74万 = 126万、年金の雑所得 200万 − 110万 = 90万
+    // 所得金額調整控除（給与と年金）：10万 + 10万 − 10万 = 10万 → 給与所得 116万
+    assert_eq!(r.income.income_adjustment_deduction, 100_000);
+    assert_eq!((r.income.salary_net, r.income.pension_net, r.income.misc_income), (1_160_000, 900_000, 900_000));
+    assert_eq!(r.income.total_income_before_carryover, 2_060_000);
+    // 所得税：206万 − 30万 − 基礎控除104万 = 72万 × 5% = 36,000、復興税 756 → 36,700
+    assert_eq!(r.income_tax.taxable_ordinary, 720_000);
+    assert_eq!(r.income_tax.total, 36_700);
+    // 住民税：206万 − 30万 − 43万 = 133万 → 133,000 − 調整控除 2,500 = 130,500
+    assert_eq!(r.resident_tax.income_levy, 130_500);
+    assert!(r.summary.filing_required, "給与以外の所得が20万円超");
+    // 手取り：400万 − 社保30万 − 36,700 − 135,500
+    assert_eq!(r.summary.take_home, 4_000_000 - 300_000 - 36_700 - 135_500);
+}
+
+#[test]
+fn side_income() {
+    // 副業の収入50万・経費20万 → 雑所得30万
+    let mut input = single(5_000_000, 750_000);
+    input.misc_income.side_revenue = 500_000;
+    input.misc_income.side_expenses = 200_000;
+    let r = calculate(&input);
+    assert_eq!((r.income.side_net, r.income.misc_income), (300_000, 300_000));
+    // 所得税：課税所得 177万 + 30万 = 207万 × 10% − 97,500 = 109,500、復興税 2,299 → 111,700
+    assert_eq!(r.income_tax.taxable_ordinary, 2_070_000);
+    assert_eq!(r.income_tax.total, 111_700);
+    // 住民税：238万 + 30万 = 268万 → 268,000 − 2,500 = 265,500
+    assert_eq!(r.resident_tax.income_levy, 265_500);
+    assert!(r.summary.filing_required);
+
+    // 赤字（収入10万・経費30万）は給与所得から引けない：税額は副業なしと同じで、手取りだけ20万減る
+    input.misc_income.side_revenue = 100_000;
+    input.misc_income.side_expenses = 300_000;
+    let r = calculate(&input);
+    assert_eq!((r.income.side_net, r.income.misc_income), (-200_000, 0));
+    assert_eq!((r.income_tax.total, r.resident_tax.total), (90_300, 240_500));
+    assert_eq!(r.summary.take_home, 3_919_200 - 200_000);
+    assert!(!r.summary.filing_required);
+}
+
+#[test]
 fn minimum_tax_warning_threshold() {
     // 給与所得 = 収入 − 195万。基準所得金額 3.3億円ちょうどでは警告しない
     let warned = |salary: i64| calculate(&single(salary, 0)).warnings.iter().any(|w| w.contains("負担の適正化措置"));
