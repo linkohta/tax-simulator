@@ -107,11 +107,11 @@ pub fn stock_income(st: &StockInput) -> StockIncome {
 
     // 申告不要とした分の源泉徴収。譲渡益は口座ごとに課税され、ほかの口座の損失とは通算されない
     let mut wh_base = if st.dividend_mode == DividendMode::NoDeclare { dividends } else { 0 };
-    let mut wh_it = mul_div(wh_base, STOCK_IT_RATE_X1000, 100_000);
+    let mut wh_it = mul_div(wh_base, STOCK_IT_RATE_X1000, RATE_X1000_DENOM);
     let mut wh_rt = wh_base * STOCK_RT_RATE_PCT / 100;
     for a in st.accounts.iter().filter(|a| !is_declared(a) && a.capital_gain > 0) {
         wh_base += a.capital_gain;
-        wh_it += mul_div(a.capital_gain, STOCK_IT_RATE_X1000, 100_000);
+        wh_it += mul_div(a.capital_gain, STOCK_IT_RATE_X1000, RATE_X1000_DENOM);
         wh_rt += a.capital_gain * STOCK_RT_RATE_PCT / 100;
     }
     if st.accounts.iter().any(|a| !is_declared(a) && a.capital_gain < 0) {
@@ -147,7 +147,7 @@ pub fn dividend_credit(div: &DividendAmounts, taxable_total: i64, rates: &[[i64;
     for (amount, rate) in pieces.iter().zip(rates) {
         above -= amount;
         let high = (taxable_total - above - DIVIDEND_CREDIT_THRESHOLD).clamp(0, *amount);
-        total += mul_div(amount - high, rate[0], 100_000) + mul_div(high, rate[1], 100_000);
+        total += mul_div(amount - high, rate[0], RATE_X1000_DENOM) + mul_div(high, rate[1], RATE_X1000_DENOM);
     }
     total
 }
