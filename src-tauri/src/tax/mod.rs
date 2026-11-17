@@ -5,6 +5,7 @@ pub mod deductions;
 pub mod foreign_tax;
 pub mod housing_loan;
 pub mod model;
+pub mod monthly;
 pub mod params;
 pub mod social;
 pub mod stocks;
@@ -293,6 +294,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let take_home = salary + dividends + stock.net_gain - si.total - total_tax;
     let effective = if gross > 0 { total_tax as f64 / gross as f64 * 100.0 } else { 0.0 };
 
+    let resident_monthly = monthly::resident_special_collection(resident_total);
     let result = TaxResult {
         income: IncomeBreakdown {
             salary_income: salary,
@@ -333,6 +335,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
             total: resident_total,
             income_levy_exempt: levy_exempt,
             per_capita_exempt,
+            monthly_first: resident_monthly.0,
+            monthly_rest: resident_monthly.1,
         },
         stock_withholding: StockWithholding { income_tax: wh_it, resident_tax: wh_rt },
         furusato: FurusatoResult::default(),
@@ -345,6 +349,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
             stock_withholding: stock_wh,
             total_tax,
             take_home,
+            take_home_monthly: monthly::monthly_average(take_home),
             effective_tax_rate: (effective * 100.0).round() / 100.0,
             filing_required,
         },

@@ -103,6 +103,7 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
         <div className="kpi accent">
           <span>手取り（概算）</span>
           <strong>{yen(s.takeHome)}</strong>
+          <span>月平均 {yen(s.takeHomeMonthly)}</span>
         </div>
       </div>
 
@@ -219,6 +220,11 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
             <Row label="住民税 合計" value={rt.total} strong />
           </tbody>
         </table>
+        {rt.total > 0 && (
+          <p className="meta">
+            給与から天引き（特別徴収）の場合：2027年6月分 {yen(rt.monthlyFirst)}、7月〜翌年5月分 各 {yen(rt.monthlyRest)}
+          </p>
+        )}
       </details>
 
       {(result.stockWithholding.incomeTax > 0 || result.stockWithholding.residentTax > 0) && (
