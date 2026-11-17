@@ -76,7 +76,7 @@ AAB は `src-tauri/gen/android/app/build/outputs/bundle/universalRelease/` に�
 
 | パス | 内容 |
 |---|---|
-| `src-tauri/src/tax/params.rs` | 税率・控除額・社会保険料率などのパラメータ（制度改正時はここを修正） |
+| `src-tauri/src/tax/params/` | 税率・控除額・社会保険料率などのパラメータ（制度改正時はここを修正） |
 | `src-tauri/src/tax/mod.rs` | 所得税・住民税の計算、ふるさと納税上限の探索 |
 | `src-tauri/src/tax/deductions.rs` | 給与所得控除、人的控除、保険料控除、医療費控除 |
 | `src-tauri/src/tax/social.rs` | 社会保険料の概算（協会けんぽ・厚生年金・雇用保険） |
