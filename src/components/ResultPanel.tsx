@@ -239,6 +239,35 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
         </details>
       )}
 
+      {result.savings.length > 0 && (
+        <details open>
+          <summary>控除による節税額</summary>
+          <table className="compare">
+            <thead>
+              <tr>
+                <th>控除</th>
+                <th className="num">所得税</th>
+                <th className="num">住民税</th>
+                <th className="num">合計</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.savings.map((sv) => (
+                <tr key={sv.label}>
+                  <td>{sv.label}</td>
+                  <td className="num">{yen(sv.incomeTax)}</td>
+                  <td className="num">{yen(sv.residentTax)}</td>
+                  <td className="num">{yen(sv.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="meta">
+            その控除だけがなかった場合と比べて減っている税額です。1つずつ比べているので、行を足した額は全部をやめた場合の差とは一致しないことがあります。ふるさと納税は上の欄を見てください。
+          </p>
+        </details>
+      )}
+
       {result.stockOptions.length > 0 && <StockOptions options={result.stockOptions} />}
 
       <p className="disclaimer">

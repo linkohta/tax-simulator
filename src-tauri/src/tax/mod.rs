@@ -7,6 +7,7 @@ pub mod housing_loan;
 pub mod model;
 pub mod monthly;
 pub mod params;
+pub mod savings;
 pub mod social;
 pub mod stocks;
 pub mod validation;
@@ -342,6 +343,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
         stock_withholding: StockWithholding { income_tax: wh_it, resident_tax: wh_rt },
         furusato: FurusatoResult::default(),
         stock_options: Vec::new(),
+        savings: Vec::new(),
         summary: Summary {
             gross_income: gross,
             social_insurance: si.total,
@@ -468,6 +470,7 @@ pub fn calculate(input: &TaxInput) -> TaxResult {
     }
 
     result.stock_options = comparison::stock_options(input, furusato_total, one_stop, result.summary.total_tax);
+    result.savings = savings::deduction_savings(input, furusato_total, one_stop, &result);
     result.furusato = FurusatoResult {
         current_total: furusato_total,
         limit,

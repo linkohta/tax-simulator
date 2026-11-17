@@ -78,6 +78,13 @@ export interface HousingLoanInput {
   specificAcquisition: boolean;
 }
 
+export interface SavingItem {
+  label: string;
+  incomeTax: number;
+  residentTax: number;
+  total: number;
+}
+
 export interface TaxInput {
   age: number;
   salary: { annualIncome: number };
@@ -202,6 +209,7 @@ export interface TaxResult {
     residentTaxReduction: number;
   };
   stockOptions: StockOption[];
+  savings: SavingItem[];
   summary: {
     grossIncome: number;
     socialInsurance: number;
