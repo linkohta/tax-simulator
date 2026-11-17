@@ -22,18 +22,11 @@ pub fn salary_net(income: i64, kind: Kind) -> i64 {
         return net;
     }
     // 収入660万円未満は所得税法別表第五（4,000円刻み）による
-    let a = if income < 6_600_000 { income / 4_000 * 4_000 } else { income };
-    let formula = if a <= 1_800_000 {
-        a * 40 / 100 - 100_000
-    } else if a <= 3_600_000 {
-        a * 30 / 100 + 80_000
-    } else if a <= 6_600_000 {
-        a * 20 / 100 + 440_000
-    } else if a <= 8_500_000 {
-        a * 10 / 100 + 1_100_000
-    } else {
-        1_950_000
-    };
+    let a = if income < SALARY_TABLE_UNTIL { income / SALARY_TABLE_STEP * SALARY_TABLE_STEP } else { income };
+    let formula = SALARY_DEDUCTION_TABLE
+        .iter()
+        .find(|r| a <= r.upper)
+        .map_or(SALARY_DEDUCTION_MAX, |r| a * r.rate_pct / 100 + r.add);
     if formula <= min {
         // 最低保障額が適用される範囲。端数表の上限（220万円）からは別表第五の4,000円刻みに入るので、
         // 収入そのものではなく刻みの下端 a から引く（例：2,203,999円 → 2,200,000 − 740,000）
@@ -82,15 +75,7 @@ pub fn basic_deduction(total_income: i64, kind: Kind) -> i64 {
 
 /// 納税者の合計所得による区分（0: 900万以下, 1: 950万以下, 2: 1000万以下, None: 超）
 fn taxpayer_tier(total_income: i64) -> Option<usize> {
-    if total_income <= 9_000_000 {
-        Some(0)
-    } else if total_income <= 9_500_000 {
-        Some(1)
-    } else if total_income <= 10_000_000 {
-        Some(2)
-    } else {
-        None
-    }
+    SPOUSE_TAXPAYER_TIERS.iter().position(|upper| total_income <= *upper)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -135,7 +120,7 @@ impl FamilyContext<'_> {
         if f.has_spouse {
             let sp = &f.spouse;
             let sp_income = relative_income(sp.salary_income, sp.other_income);
-            let elderly = sp.age >= 70;
+            let elderly = sp.age >= ELDERLY_AGE_FROM;
             if sp_income <= DEPENDENT_INCOME_LIMIT {
                 out.household_count += 1;
                 out.has_dependents_for_exemption = true;
@@ -180,26 +165,27 @@ impl FamilyContext<'_> {
         for (i, d) in f.dependents.iter().enumerate() {
             let inc = relative_income(d.salary_income, d.other_income);
             let label_name = if d.name.trim().is_empty() { format!("親族{}", i + 1) } else { d.name.clone() };
-            if d.age < 23 && inc <= DEPENDENT_INCOME_LIMIT {
+            let specific_age = (DEP_SPECIFIC_AGE_FROM..YOUNG_DEPENDENT_AGE_UNTIL).contains(&d.age);
+            if d.age < YOUNG_DEPENDENT_AGE_UNTIL && inc <= DEPENDENT_INCOME_LIMIT {
                 out.has_dependent_under_23 = true;
             }
             if inc <= DEPENDENT_INCOME_LIMIT {
                 out.household_count += 1;
                 out.has_dependents_for_exemption = true;
-                let (label, amt_it, amt_rt, diff) = if d.age < 16 {
+                let (label, amt_it, amt_rt, diff) = if d.age < DEP_AGE_FROM {
                     ("年少扶養（控除なし）", 0, 0, 0)
-                } else if (19..=22).contains(&d.age) {
+                } else if specific_age {
                     ("扶養控除（特定）", DEP_SPECIFIC_IT, DEP_SPECIFIC_RT, DIFF_DEP_SPECIFIC)
-                } else if d.age >= 70 && d.cohabiting_parent {
+                } else if d.age >= ELDERLY_AGE_FROM && d.cohabiting_parent {
                     ("扶養控除（同居老親等）", DEP_ELDERLY_COHAB_IT, DEP_ELDERLY_COHAB_RT, DIFF_DEP_ELDERLY_COHAB)
-                } else if d.age >= 70 {
+                } else if d.age >= ELDERLY_AGE_FROM {
                     ("扶養控除（老人）", DEP_ELDERLY_IT, DEP_ELDERLY_RT, DIFF_DEP_ELDERLY)
                 } else {
                     ("扶養控除（一般）", DEP_GENERAL_IT, DEP_GENERAL_RT, DIFF_DEP_GENERAL)
                 };
                 push(&mut out, &format!("{label}：{label_name}"), pick(amt_it, amt_rt));
                 out.personal_diff += diff;
-            } else if (19..=22).contains(&d.age) {
+            } else if specific_age {
                 if let Some(row) = SPECIFIC_RELATIVE.iter().find(|r| inc <= r.upper) {
                     push(&mut out, &format!("特定親族特別控除：{label_name}"), pick(row.it, row.rt));
                     out.personal_diff += row.diff;
@@ -265,65 +251,30 @@ impl FamilyContext<'_> {
 
 // ───────────── 保険料控除 ─────────────
 
-fn life_new_it(x: i64, cap: i64) -> i64 {
-    // cap=40,000（通常）/ 60,000（令和8年分 23歳未満扶養親族の特例）
-    if x <= 0 {
-        0
-    } else if x <= cap / 2 {
-        x
-    } else if x <= cap {
-        ceil_div(x, 2) + cap / 4
-    } else if x <= cap * 2 {
-        ceil_div(x, 4) + cap / 2
-    } else {
-        cap
-    }
-}
-
 /// 生命保険料控除の算式は1円未満切上げ
 fn ceil_div(x: i64, d: i64) -> i64 {
     (x + d - 1) / d
 }
 
-fn life_old_it(x: i64) -> i64 {
-    if x <= 0 {
-        0
-    } else if x <= 25_000 {
-        x
-    } else if x <= 50_000 {
-        ceil_div(x, 2) + 12_500
-    } else if x <= 100_000 {
-        ceil_div(x, 4) + 25_000
-    } else {
-        50_000
-    }
+/// 生命保険料控除の1区分の上限額（区切りで金額が連続することから決まる）
+fn life_cap(t: &LifeInsuranceTier) -> i64 {
+    t.quarter_until / 4 + t.half_until / 4 + t.full_until / 2
 }
 
-fn life_new_rt(x: i64) -> i64 {
+/// 生命保険料控除の1区分の額（支払保険料 `x` を表 `t` に当てはめる）
+fn life_amount(t: &LifeInsuranceTier, x: i64) -> i64 {
+    let add_half = t.full_until / 2;
+    let add_quarter = t.half_until / 4 + add_half;
     if x <= 0 {
         0
-    } else if x <= 12_000 {
+    } else if x <= t.full_until {
         x
-    } else if x <= 32_000 {
-        ceil_div(x, 2) + 6_000
-    } else if x <= 56_000 {
-        ceil_div(x, 4) + 14_000
+    } else if x <= t.half_until {
+        ceil_div(x, 2) + add_half
+    } else if x <= t.quarter_until {
+        ceil_div(x, 4) + add_quarter
     } else {
-        28_000
-    }
-}
-
-fn life_old_rt(x: i64) -> i64 {
-    if x <= 0 {
-        0
-    } else if x <= 15_000 {
-        x
-    } else if x <= 40_000 {
-        ceil_div(x, 2) + 7_500
-    } else if x <= 70_000 {
-        ceil_div(x, 4) + 17_500
-    } else {
-        35_000
+        life_cap(t)
     }
 }
 
@@ -337,49 +288,46 @@ fn combine(new_amt: i64, old_amt: i64, old_raw: i64, combined_cap: i64) -> i64 {
 }
 
 pub fn life_insurance(ins: &InsurancePremiumInput, kind: Kind, has_dependent_under_23: bool) -> i64 {
-    // ceil 処理：法令上は1円未満切上げ
-    match kind {
+    // (一般の新契約, 介護医療・個人年金の新契約, 旧契約, 合計の上限)
+    let (general_new, new, old, total_cap) = match kind {
         Kind::IncomeTax => {
-            let general_cap = if has_dependent_under_23 { LIFE_GENERAL_CAP_SPECIAL_IT } else { 40_000 };
-            let general = combine(
-                life_new_it(ins.life_new, general_cap),
-                life_old_it(ins.life_old),
-                ins.life_old,
-                general_cap,
-            );
-            let care = life_new_it(ins.medical_care, 40_000);
-            let pension = combine(
-                life_new_it(ins.pension_new, 40_000),
-                life_old_it(ins.pension_old),
-                ins.pension_old,
-                40_000,
-            );
-            (general + care + pension).min(120_000)
+            let general_new = if has_dependent_under_23 { &LIFE_NEW_SPECIAL_IT } else { &LIFE_NEW_IT };
+            (general_new, &LIFE_NEW_IT, &LIFE_OLD_IT, LIFE_TOTAL_CAP_IT)
         }
-        Kind::Resident => {
-            let general = combine(life_new_rt(ins.life_new), life_old_rt(ins.life_old), ins.life_old, 28_000);
-            let care = life_new_rt(ins.medical_care);
-            let pension = combine(life_new_rt(ins.pension_new), life_old_rt(ins.pension_old), ins.pension_old, 28_000);
-            (general + care + pension).min(70_000)
-        }
-    }
+        Kind::Resident => (&LIFE_NEW_RT, &LIFE_NEW_RT, &LIFE_OLD_RT, LIFE_TOTAL_CAP_RT),
+    };
+    let general = combine(
+        life_amount(general_new, ins.life_new),
+        life_amount(old, ins.life_old),
+        ins.life_old,
+        life_cap(general_new),
+    );
+    let care = life_amount(new, ins.medical_care);
+    let pension = combine(
+        life_amount(new, ins.pension_new),
+        life_amount(old, ins.pension_old),
+        ins.pension_old,
+        life_cap(new),
+    );
+    (general + care + pension).min(total_cap)
 }
 
 pub fn earthquake_insurance(ins: &InsurancePremiumInput, kind: Kind) -> i64 {
-    let eq = ins.earthquake.max(0);
+    let t = match kind {
+        Kind::IncomeTax => &EARTHQUAKE_IT,
+        Kind::Resident => &EARTHQUAKE_RT,
+    };
+    let premium = (ins.earthquake.max(0) / t.premium_div).min(t.cap);
     let old = ins.old_long_term.max(0);
-    match kind {
-        Kind::IncomeTax => {
-            let a = eq.min(50_000);
-            let b = if old <= 10_000 { old } else if old <= 20_000 { old / 2 + 5_000 } else { 15_000 };
-            (a + b).min(50_000)
-        }
-        Kind::Resident => {
-            let a = (eq / 2).min(25_000);
-            let b = if old <= 5_000 { old } else if old <= 15_000 { old / 2 + 2_500 } else { 10_000 };
-            (a + b).min(25_000)
-        }
-    }
+    let add = t.old_full_until / 2;
+    let old_amount = if old <= t.old_full_until {
+        old
+    } else if old <= t.old_half_until {
+        old / 2 + add
+    } else {
+        t.old_half_until / 2 + add
+    };
+    (premium + old_amount).min(t.cap)
 }
 
 /// 医療費控除（`total_income_base` は総所得金額等）
@@ -387,10 +335,10 @@ pub fn medical(m: &MedicalInput, total_income_base: i64) -> i64 {
     match m.mode {
         MedicalMode::Normal => {
             let net = (m.expenses - m.reimbursed).max(0);
-            let threshold = (total_income_base * 5 / 100).min(100_000).max(0);
-            (net - threshold).clamp(0, 2_000_000)
+            let threshold = (total_income_base * MEDICAL_THRESHOLD_INCOME_PCT / 100).min(MEDICAL_THRESHOLD).max(0);
+            (net - threshold).clamp(0, MEDICAL_CAP)
         }
-        MedicalMode::SelfMedication => (m.otc_purchases - 12_000).clamp(0, 88_000),
+        MedicalMode::SelfMedication => (m.otc_purchases - SELF_MEDICATION_THRESHOLD).clamp(0, SELF_MEDICATION_CAP),
     }
 }
 
@@ -400,15 +348,15 @@ mod tests {
 
     #[test]
     fn life_it() {
-        assert_eq!(life_new_it(20_000, 40_000), 20_000);
-        assert_eq!(life_new_it(40_000, 40_000), 30_000);
-        assert_eq!(life_new_it(80_000, 40_000), 40_000);
-        assert_eq!(life_new_it(100_000, 40_000), 40_000);
+        assert_eq!(life_amount(&LIFE_NEW_IT, 20_000), 20_000);
+        assert_eq!(life_amount(&LIFE_NEW_IT, 40_000), 30_000);
+        assert_eq!(life_amount(&LIFE_NEW_IT, 80_000), 40_000);
+        assert_eq!(life_amount(&LIFE_NEW_IT, 100_000), 40_000);
         // 特例上限6万：3万以下全額、6万以下 x/2+1.5万、12万以下 x/4+3万
-        assert_eq!(life_new_it(30_000, 60_000), 30_000);
-        assert_eq!(life_new_it(60_000, 60_000), 45_000);
-        assert_eq!(life_new_it(120_000, 60_000), 60_000);
-        assert_eq!(life_new_it(200_000, 60_000), 60_000);
+        assert_eq!(life_amount(&LIFE_NEW_SPECIAL_IT, 30_000), 30_000);
+        assert_eq!(life_amount(&LIFE_NEW_SPECIAL_IT, 60_000), 45_000);
+        assert_eq!(life_amount(&LIFE_NEW_SPECIAL_IT, 120_000), 60_000);
+        assert_eq!(life_amount(&LIFE_NEW_SPECIAL_IT, 200_000), 60_000);
     }
 
     #[test]
@@ -441,12 +389,12 @@ mod tests {
     #[test]
     fn life_old_and_combined() {
         // 旧契約（所得税）：2.5万以下全額、5万以下 x/2+1.25万、10万以下 x/4+2.5万、上限5万
-        assert_eq!(life_old_it(25_000), 25_000);
-        assert_eq!(life_old_it(50_000), 37_500);
-        assert_eq!(life_old_it(100_000), 50_000);
-        assert_eq!(life_old_it(100_001), 50_000);
+        assert_eq!(life_amount(&LIFE_OLD_IT, 25_000), 25_000);
+        assert_eq!(life_amount(&LIFE_OLD_IT, 50_000), 37_500);
+        assert_eq!(life_amount(&LIFE_OLD_IT, 100_000), 50_000);
+        assert_eq!(life_amount(&LIFE_OLD_IT, 100_001), 50_000);
         // 1円未満切上げ：20,001/2 = 10,000.5 → 10,001 + 10,000
-        assert_eq!(life_new_it(20_001, 40_000), 20_001);
+        assert_eq!(life_amount(&LIFE_NEW_IT, 20_001), 20_001);
         // 新旧両方：旧だけの額（5万）と、新＋旧の合計（上限4万）の大きい方
         let ins = InsurancePremiumInput { life_new: 80_000, life_old: 100_000, ..Default::default() };
         assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 50_000);
@@ -454,11 +402,11 @@ mod tests {
         let ins = InsurancePremiumInput { life_new: 80_000, life_old: 20_000, ..Default::default() };
         assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 40_000);
         // 住民税：新 1.2万以下全額、3.2万以下 x/2+6千、5.6万以下 x/4+1.4万
-        assert_eq!(life_new_rt(12_000), 12_000);
-        assert_eq!(life_new_rt(32_000), 22_000);
+        assert_eq!(life_amount(&LIFE_NEW_RT, 12_000), 12_000);
+        assert_eq!(life_amount(&LIFE_NEW_RT, 32_000), 22_000);
         // 住民税：旧 1.5万以下全額、4万以下 x/2+7.5千、7万以下 x/4+1.75万
-        assert_eq!(life_old_rt(15_000), 15_000);
-        assert_eq!(life_old_rt(40_000), 27_500);
+        assert_eq!(life_amount(&LIFE_OLD_RT, 15_000), 15_000);
+        assert_eq!(life_amount(&LIFE_OLD_RT, 40_000), 27_500);
     }
 
     #[test]
@@ -627,8 +575,8 @@ mod tests {
 
     #[test]
     fn life_rt() {
-        assert_eq!(life_new_rt(56_000), 28_000);
-        assert_eq!(life_old_rt(70_000), 35_000);
+        assert_eq!(life_amount(&LIFE_NEW_RT, 56_000), 28_000);
+        assert_eq!(life_amount(&LIFE_OLD_RT, 70_000), 35_000);
         let ins = InsurancePremiumInput { life_new: 100_000, medical_care: 100_000, pension_new: 100_000, ..Default::default() };
         assert_eq!(life_insurance(&ins, Kind::Resident, false), 70_000);
         assert_eq!(life_insurance(&ins, Kind::IncomeTax, false), 120_000);

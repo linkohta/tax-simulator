@@ -329,3 +329,193 @@ pub const HEALTH_BONUS_ANNUAL_CAP: i64 = 5_730_000;
 pub const PENSION_BONUS_PER_PAYMENT_CAP: i64 = 1_500_000;
 /// 雇用保険料率（労働者負担、1/10000単位：5/1000 → 50）
 pub const EMPLOYMENT_RATE: i64 = 50;
+
+// ───────────── 率の単位・端数 ─────────────
+
+/// 「1/1000 %単位」の率を金額に掛けるときの分母（9.85% = 9_850 / 100_000）
+pub const RATE_X1000_DENOM: i64 = 100_000;
+/// 課税所得金額の端数：1,000円未満切捨て（国税通則法118条、地方税法20条の4の2）
+pub const TAXABLE_INCOME_UNIT: i64 = 1_000;
+/// 税額の端数：100円未満切捨て（国税通則法119条、地方税法20条の4の2）
+pub const TAX_UNIT: i64 = 100;
+
+// ───────────── 給与所得控除の算式 ─────────────
+
+/// 給与所得控除額 = 収入 × 率 + 加算額（所法28条3項）
+pub struct SalaryDeductionRow {
+    /// この収入以下に適用
+    pub upper: i64,
+    pub rate_pct: i64,
+    pub add: i64,
+}
+pub static SALARY_DEDUCTION_TABLE: &[SalaryDeductionRow] = &[
+    SalaryDeductionRow { upper: 1_800_000, rate_pct: 40, add: -100_000 },
+    SalaryDeductionRow { upper: 3_600_000, rate_pct: 30, add: 80_000 },
+    SalaryDeductionRow { upper: 6_600_000, rate_pct: 20, add: 440_000 },
+    SalaryDeductionRow { upper: 8_500_000, rate_pct: 10, add: 1_100_000 },
+];
+/// 給与所得控除額の上限（収入850万円超）
+pub const SALARY_DEDUCTION_MAX: i64 = 1_950_000;
+/// 収入がこの額未満なら所得税法別表第五による（収入を刻みの下端に切り下げて算式に当てはめる）
+pub const SALARY_TABLE_UNTIL: i64 = 6_600_000;
+/// 別表第五の刻み
+pub const SALARY_TABLE_STEP: i64 = 4_000;
+
+// ───────────── 年齢・所得の区分 ─────────────
+
+/// 配偶者控除・配偶者特別控除の、納税者の合計所得金額の区分の上限（これを超えると控除なし）
+pub const SPOUSE_TAXPAYER_TIERS: [i64; 3] = [9_000_000, 9_500_000, 10_000_000];
+/// 控除対象扶養親族は16歳以上
+pub const DEP_AGE_FROM: u32 = 16;
+/// 特定扶養親族・特定親族特別控除は19歳以上23歳未満
+pub const DEP_SPECIFIC_AGE_FROM: u32 = 19;
+/// 23歳未満（特定扶養親族の上限、所得金額調整控除・生命保険料控除の特例の判定）
+pub const YOUNG_DEPENDENT_AGE_UNTIL: u32 = 23;
+/// 老人扶養親族・老人控除対象配偶者は70歳以上
+pub const ELDERLY_AGE_FROM: u32 = 70;
+/// 住民税の非課税判定での未成年者（18歳未満）
+pub const RT_MINOR_AGE_UNTIL: u32 = 18;
+
+// ───────────── 生命保険料控除・地震保険料控除・医療費控除 ─────────────
+
+/// 生命保険料控除の算式の区切り（所法76条、地方税法34条1項5号）。
+/// `full_until` 以下は全額、`half_until` 以下は 1/2 + 定額、`quarter_until` 以下は 1/4 + 定額、超えると上限。
+/// 定額と上限は、区切りで金額が連続することから決まる（deductions::life_amount）。
+pub struct LifeInsuranceTier {
+    pub full_until: i64,
+    pub half_until: i64,
+    pub quarter_until: i64,
+}
+/// 所得税・新契約（上限4万円）
+pub const LIFE_NEW_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 20_000, half_until: 40_000, quarter_until: 80_000 };
+/// 所得税・一般生命保険料の新契約で23歳未満の扶養親族がいる場合（上限6万円。令和8年分の特例）
+pub const LIFE_NEW_SPECIAL_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 30_000, half_until: 60_000, quarter_until: 120_000 };
+/// 所得税・旧契約（上限5万円）
+pub const LIFE_OLD_IT: LifeInsuranceTier = LifeInsuranceTier { full_until: 25_000, half_until: 50_000, quarter_until: 100_000 };
+/// 住民税・新契約（上限2.8万円）
+pub const LIFE_NEW_RT: LifeInsuranceTier = LifeInsuranceTier { full_until: 12_000, half_until: 32_000, quarter_until: 56_000 };
+/// 住民税・旧契約（上限3.5万円）
+pub const LIFE_OLD_RT: LifeInsuranceTier = LifeInsuranceTier { full_until: 15_000, half_until: 40_000, quarter_until: 70_000 };
+/// 生命保険料控除の合計の上限（一般・介護医療・個人年金の合計）
+pub const LIFE_TOTAL_CAP_IT: i64 = 120_000;
+pub const LIFE_TOTAL_CAP_RT: i64 = 70_000;
+
+/// 地震保険料控除（所法77条、地方税法34条1項5号の3）
+pub struct EarthquakeTable {
+    /// 地震保険料を割る数（所得税は全額＝1、住民税は1/2＝2）
+    pub premium_div: i64,
+    /// 地震保険料分の上限、かつ旧長期損害保険料との合計の上限
+    pub cap: i64,
+    /// 旧長期損害保険料：この額以下は全額
+    pub old_full_until: i64,
+    /// 旧長期損害保険料：この額以下は 1/2 + 定額、超えると上限
+    pub old_half_until: i64,
+}
+pub const EARTHQUAKE_IT: EarthquakeTable = EarthquakeTable { premium_div: 1, cap: 50_000, old_full_until: 10_000, old_half_until: 20_000 };
+pub const EARTHQUAKE_RT: EarthquakeTable = EarthquakeTable { premium_div: 2, cap: 25_000, old_full_until: 5_000, old_half_until: 15_000 };
+
+/// 医療費控除の足切り：10万円と総所得金額等の5%の少ない方（所法73条）
+pub const MEDICAL_THRESHOLD: i64 = 100_000;
+pub const MEDICAL_THRESHOLD_INCOME_PCT: i64 = 5;
+/// 医療費控除の上限
+pub const MEDICAL_CAP: i64 = 2_000_000;
+/// セルフメディケーション税制の足切りと上限（措法41条の17）
+pub const SELF_MEDICATION_THRESHOLD: i64 = 12_000;
+pub const SELF_MEDICATION_CAP: i64 = 88_000;
+
+// ───────────── 寄附金・確定申告 ─────────────
+
+/// 寄附金控除・寄附金税額控除の自己負担額
+pub const DONATION_SELF_BURDEN: i64 = 2_000;
+/// 所得税の寄附金控除の対象額の上限：総所得金額等の40%（所法78条）
+pub const DONATION_IT_INCOME_LIMIT_PCT: i64 = 40;
+/// 住民税の寄附金税額控除の対象額の上限：総所得金額等の30%（地方税法37条の2・314条の7）
+pub const DONATION_RT_INCOME_LIMIT_PCT: i64 = 30;
+/// ふるさと納税の特例控除額の上限：調整控除後の所得割額の20%
+pub const FURUSATO_SPECIAL_CAP_PCT: i64 = 20;
+/// ワンストップ特例を使える寄附先の数の上限
+pub const ONE_STOP_MAX_DONEES: usize = 5;
+/// ふるさと納税の上限額を探すときの刻み
+pub const FURUSATO_SEARCH_STEP: i64 = 1_000;
+/// 給与収入がこの額を超えると年末調整の対象外で、確定申告が必要（所法190条）
+pub const SALARY_FILING_REQUIRED_OVER: i64 = 20_000_000;
+
+// ───────────── 税率 ─────────────
+
+/// 申告分離課税の上場株式等の所得税率（%。措法8条の4・37条の11）
+pub const STOCK_SEPARATE_IT_RATE_PCT: i64 = 15;
+/// 住民税所得割の標準税率（%）[市町村, 道府県]（地方税法314条の3・35条）
+pub const RESIDENT_RATE_PCT: [i64; 2] = [6, 4];
+/// 申告分離課税の上場株式等の住民税率（%）[市町村, 道府県]（地方税法附則33条の2・35条の2の2）
+pub const STOCK_SEPARATE_RT_RATE_PCT: [i64; 2] = [3, 2];
+
+/// 調整控除（地方税法37条・314条の6）：合計所得金額がこの額を超えると適用なし
+pub const ADJUSTMENT_CREDIT_INCOME_LIMIT: i64 = 25_000_000;
+/// 調整控除：合計課税所得金額がこの額以下かどうかで算式が変わる
+pub const ADJUSTMENT_CREDIT_THRESHOLD: i64 = 2_000_000;
+/// 調整控除の率（%）[市町村, 道府県]
+pub const ADJUSTMENT_CREDIT_RATE_PCT: [i64; 2] = [3, 2];
+/// 調整控除の最低額 [市町村, 道府県]（合計2,500円。200万円超の算式で下回る場合）
+pub const ADJUSTMENT_CREDIT_MIN: [i64; 2] = [1_500, 1_000];
+
+// ───────────── 標準報酬・賞与 ─────────────
+
+/// 健康保険の標準報酬月額表（等級ごとの「標準報酬月額」と「報酬月額の下限」。健康保険法40条）
+pub static HEALTH_GRADES: [(i64, i64); 50] = [
+    (58_000, 0),
+    (68_000, 63_000),
+    (78_000, 73_000),
+    (88_000, 83_000),
+    (98_000, 93_000),
+    (104_000, 101_000),
+    (110_000, 107_000),
+    (118_000, 114_000),
+    (126_000, 122_000),
+    (134_000, 130_000),
+    (142_000, 138_000),
+    (150_000, 146_000),
+    (160_000, 155_000),
+    (170_000, 165_000),
+    (180_000, 175_000),
+    (190_000, 185_000),
+    (200_000, 195_000),
+    (220_000, 210_000),
+    (240_000, 230_000),
+    (260_000, 250_000),
+    (280_000, 270_000),
+    (300_000, 290_000),
+    (320_000, 310_000),
+    (340_000, 330_000),
+    (360_000, 350_000),
+    (380_000, 370_000),
+    (410_000, 395_000),
+    (440_000, 425_000),
+    (470_000, 455_000),
+    (500_000, 485_000),
+    (530_000, 515_000),
+    (560_000, 545_000),
+    (590_000, 575_000),
+    (620_000, 605_000),
+    (650_000, 635_000),
+    (680_000, 665_000),
+    (710_000, 695_000),
+    (750_000, 730_000),
+    (790_000, 770_000),
+    (830_000, 810_000),
+    (880_000, 855_000),
+    (930_000, 905_000),
+    (980_000, 955_000),
+    (1_030_000, 1_005_000),
+    (1_090_000, 1_055_000),
+    (1_150_000, 1_115_000),
+    (1_210_000, 1_175_000),
+    (1_270_000, 1_235_000),
+    (1_330_000, 1_295_000),
+    (1_390_000, 1_355_000),
+];
+/// 標準賞与額は賞与の1,000円未満を切り捨てた額
+pub const BONUS_STANDARD_UNIT: i64 = 1_000;
+/// 雇用保険料率（1/10000単位）の分母
+pub const EMPLOYMENT_RATE_DENOM: i64 = 10_000;
+/// 都道府県が表にないときに使う協会けんぽの料率の都道府県
+pub const KYOKAI_KENPO_FALLBACK_PREFECTURE: &str = "東京都";
