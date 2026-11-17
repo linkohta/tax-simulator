@@ -6,6 +6,7 @@
 
 mod deductions;
 mod housing_loan;
+mod misc;
 mod personal;
 mod rates;
 mod resident;
@@ -14,6 +15,7 @@ mod social;
 
 pub use deductions::*;
 pub use housing_loan::*;
+pub use misc::*;
 pub use personal::*;
 pub use rates::*;
 pub use resident::*;

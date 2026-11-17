@@ -147,6 +147,9 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
             <Row label="給与所得控除" value={inc.salaryDeduction} minus />
             {inc.incomeAdjustmentDeduction > 0 && <Row label="所得金額調整控除" value={inc.incomeAdjustmentDeduction} minus />}
             <Row label="給与所得" value={inc.salaryNet} strong />
+            {inc.pensionNet > 0 && <Row label="雑所得（公的年金等）" value={inc.pensionNet} />}
+            {inc.sideNet !== 0 && <Row label="雑所得（副業など：収入 − 経費）" value={inc.sideNet} />}
+            {inc.sideNet < 0 && <Row label="雑所得の金額（赤字はほかの所得から引けない）" value={inc.miscIncome} />}
             {inc.dividendComprehensive > 0 && <Row label="配当所得（総合課税）" value={inc.dividendComprehensive} />}
             {inc.dividendSeparate > 0 && <Row label="配当所得等（分離・通算後）" value={inc.dividendSeparate} />}
             {inc.capitalGainSeparate > 0 && <Row label="譲渡所得等（分離）" value={inc.capitalGainSeparate} />}

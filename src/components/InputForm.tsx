@@ -10,6 +10,7 @@ import {
 } from "./Fields";
 import { DependentInput, TaxInput, newDependent } from "../types";
 import { HousingLoanSection } from "./sections/HousingLoanSection";
+import { MiscIncomeSection } from "./sections/MiscIncomeSection";
 import { StockSection } from "./sections/StockSection";
 
 type Props = {
@@ -37,6 +38,7 @@ export function InputForm({ input, setInput, prefectures }: Props) {
   const setDon = useSection(setInput, "donations");
   const setStock = useSection(setInput, "stocks");
   const setHl = useSection(setInput, "housingLoan");
+  const setMisc = useSection(setInput, "miscIncome");
 
   const si = input.socialInsurance;
   const fam = input.family;
@@ -464,6 +466,8 @@ export function InputForm({ input, setInput, prefectures }: Props) {
       </Section>
 
       <HousingLoanSection housingLoan={input.housingLoan} setHl={setHl} />
+
+      <MiscIncomeSection miscIncome={input.miscIncome} setMisc={setMisc} />
 
       <StockSection stocks={input.stocks} setStock={setStock} />
     </div>

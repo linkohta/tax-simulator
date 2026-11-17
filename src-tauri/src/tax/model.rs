@@ -22,6 +22,19 @@ pub struct TaxInput {
     pub donations: DonationInput,
     pub stocks: StockInput,
     pub housing_loan: HousingLoanInput,
+    pub misc_income: MiscIncomeInput,
+}
+
+/// 雑所得（公的年金等、副業）
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MiscIncomeInput {
+    /// 公的年金等の収入金額（源泉徴収票の「支払金額」）
+    pub pension_income: i64,
+    /// 副業などの雑所得の収入金額
+    pub side_revenue: i64,
+    /// 同、必要経費
+    pub side_expenses: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -448,6 +461,12 @@ pub struct IncomeBreakdown {
     pub income_adjustment_deduction: i64,
     /// 給与所得
     pub salary_net: i64,
+    /// 公的年金等に係る雑所得
+    pub pension_net: i64,
+    /// 副業の雑所得（収入 − 必要経費。赤字ならマイナス）
+    pub side_net: i64,
+    /// 雑所得の金額（公的年金等と副業を通算。赤字は0）
+    pub misc_income: i64,
     /// 総合課税の配当所得
     pub dividend_comprehensive: i64,
     /// 申告分離の上場株式等の配当所得等（損益通算後）

@@ -4,6 +4,7 @@ pub mod comparison;
 pub mod deductions;
 pub mod foreign_tax;
 pub mod housing_loan;
+pub mod misc_income;
 pub mod model;
 pub mod monthly;
 pub mod params;
@@ -62,8 +63,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let salary_ded_rt = deductions::salary_deduction(salary, Kind::Resident);
 
     let adj = deductions::income_adjustment(salary, deductions::income_adjustment_eligible(fam));
-    let salary_net_it = (salary - salary_ded_it - adj).max(0);
-    let salary_net_rt = (salary - salary_ded_rt - adj).max(0);
+    let salary_before_pension_it = (salary - salary_ded_it - adj).max(0);
+    let salary_before_pension_rt = (salary - salary_ded_rt - adj).max(0);
 
     // ── 株式 ──
     let st = &input.stocks;
@@ -72,11 +73,21 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let dividends = stock.dividends_total;
     let div_comp = stock.div_comp.total();
     let (div_sep, gain, loss_next) = (stock.div_sep, stock.gain, stock.loss_next);
-    let total_income_it = salary_net_it + div_comp + stock.separate_before_carry; // 合計所得金額（繰越控除前）
-    let total_income_rt = salary_net_rt + div_comp + stock.separate_before_carry;
+
+    // ── 雑所得（公的年金等・副業）。給与と年金の両方があれば、給与所得から所得金額調整控除を引く ──
+    let stock_income = div_comp + stock.separate_before_carry;
+    let misc = misc_income::misc_income(&input.misc_income, input.age, salary_before_pension_it, stock_income);
+    let misc_rt = misc_income::misc_income(&input.misc_income, input.age, salary_before_pension_rt, stock_income);
+    let salary_net_it = salary_before_pension_it - misc.salary_adjustment;
+    let salary_net_rt = salary_before_pension_rt - misc_rt.salary_adjustment;
+    let (misc_reason, misc_notes) = misc_income::filing(&input.misc_income, salary, &misc);
+    warnings.extend(misc_notes);
+
+    let total_income_it = salary_net_it + misc.total + stock_income; // 合計所得金額（繰越控除前）
+    let total_income_rt = salary_net_rt + misc_rt.total + stock_income;
     let separate_income = div_sep + gain;
-    let ordinary_it = salary_net_it + div_comp;
-    let ordinary_rt = salary_net_rt + div_comp;
+    let ordinary_it = salary_net_it + misc.total + div_comp;
+    let ordinary_rt = salary_net_rt + misc_rt.total + div_comp;
     let total_base_it = ordinary_it + separate_income; // 総所得金額等
     let total_base_rt = ordinary_rt + separate_income;
 
@@ -107,6 +118,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     if salary > SALARY_FILING_REQUIRED_OVER {
         filing_reasons.push("給与収入2,000万円超");
     }
+    filing_reasons.extend(misc_reason);
     let mut one_stop = one_stop_requested && furusato_total > 0;
     if one_stop && !filing_reasons.is_empty() {
         one_stop = false;
@@ -295,9 +307,12 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     }
 
     let stock_wh = wh_it + wh_rt;
-    let gross = salary + dividends + stock.net_gain.max(0);
+    let misc_in = &input.misc_income;
+    let gross =
+        salary + misc_in.pension_income.max(0) + misc_in.side_revenue.max(0) + dividends + stock.net_gain.max(0);
     let total_tax = income_tax_total + resident_total + stock_wh;
-    let take_home = salary + dividends + stock.net_gain - si.total - total_tax;
+    let take_home =
+        salary + misc_in.pension_income.max(0) + misc.side_net + dividends + stock.net_gain - si.total - total_tax;
     let effective = if gross > 0 { total_tax as f64 / gross as f64 * 100.0 } else { 0.0 };
 
     let resident_monthly = monthly::resident_special_collection(resident_total);
@@ -305,8 +320,11 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
         income: IncomeBreakdown {
             salary_income: salary,
             salary_deduction: salary_ded_it,
-            income_adjustment_deduction: adj,
+            income_adjustment_deduction: adj + misc.salary_adjustment,
             salary_net: salary_net_it,
+            pension_net: misc.pension_net,
+            side_net: misc.side_net,
+            misc_income: misc.total,
             dividend_comprehensive: div_comp,
             dividend_separate: div_sep,
             capital_gain_separate: gain,
