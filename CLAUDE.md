@@ -31,13 +31,13 @@ npm run tauri android build -- --aab  # Google Play 用 AAB
 - 株式の課税方式の比較（配当の3方式 × 源泉徴収ありの特定口座を申告するか）と、口座ごとの譲渡損益
 - 税額控除：配当控除（投資信託の区分を含む）、外国税額控除、住宅借入金等特別控除、住民税の調整控除・寄附金税額控除（基本分・特例分・申告特例分）
 - ふるさと納税の上限額の探索（自己負担2,000円以内の最大寄附額を二分探索）
-- 入力シナリオの JSON 保存・読込
+- 入力シナリオの JSON 保存・読込、入力の自動保存と起動時の復元（アプリのデータフォルダの `draft.json`）
 
 ## ディレクトリ構成
 
 ```
 src-tauri/src/
-  lib.rs              Tauri コマンド（calculate / prefectures / save_scenario / load_scenario）
+  lib.rs              Tauri コマンド（calculate / prefectures / save_scenario / load_scenario / save_draft / load_draft）
   tax/
     mod.rs            計算の本体 compute() と公開 API calculate()
     model.rs          入出力のデータモデル（serde, camelCase）
@@ -95,7 +95,7 @@ src-tauri/gen/android/  Android プロジェクト（手を加えているので
 - enum は `#[serde(rename_all = "camelCase")]` を付ける。
 - `unwrap()` / `expect()` は、入力によって失敗しない箇所だけで使う。Tauri コマンドのエラーは `Result<_, String>` で、日本語のメッセージにして返す。
 - 計算関数は副作用のない純粋関数にする（I/O は `lib.rs` のコマンドだけ）。
-- ファイルの読み書きは `std::fs` ではなく `tauri_plugin_fs::FsExt`（`app.fs()`）で行う。Android のファイル選択画面は `content://` URI を返すため。
+- ファイルの読み書きは `std::fs` ではなく `tauri_plugin_fs::FsExt`（`app.fs()`）で行う。Android のファイル選択画面は `content://` URI を返すため。フォルダの作成だけは API がないので `std::fs` を使う（アプリのデータフォルダに限る）。
 - 警告は `warnings: Vec<String>` に日本語で追加する。panic で済ませない。
 - `cargo build` / `cargo test` で warning を出さない。
 

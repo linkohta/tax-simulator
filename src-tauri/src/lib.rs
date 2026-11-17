@@ -1,8 +1,9 @@
 pub mod tax;
 
 use std::io::Write;
+use std::path::PathBuf;
 
-use tauri::{Runtime, Window};
+use tauri::{AppHandle, Manager, Runtime, Window};
 use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 use tauri_plugin_fs::{FsExt, OpenOptions};
 use tax::model::{TaxInput, TaxResult};
@@ -12,6 +13,8 @@ const SCENARIO_FILTER_NAME: &str = "税シミュレーション";
 const SCENARIO_EXTENSIONS: &[&str] = &["json"];
 /// 保存ダイアログに最初から入れておくファイル名
 const SCENARIO_DEFAULT_FILE_NAME: &str = "tax-scenario.json";
+/// 自動保存する下書きのファイル名（アプリのデータフォルダに置く）
+const DRAFT_FILE_NAME: &str = "draft.json";
 
 /// 税額を計算する
 #[tauri::command]
@@ -77,6 +80,44 @@ async fn load_scenario(window: Window) -> Result<Option<TaxInput>, String> {
         .map_err(|e| format!("ファイル形式が正しくありません: {e}"))
 }
 
+/// 下書きのファイルの場所（アプリのデータフォルダ内で固定。Webview からは指定できない）
+fn draft_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join(DRAFT_FILE_NAME))
+        .map_err(|e| format!("保存先を取得できません: {e}"))
+}
+
+/// 入力内容を下書きとして自動保存する（次の起動時に `load_draft` で復元する）
+#[tauri::command]
+async fn save_draft(app: AppHandle, input: TaxInput) -> Result<(), String> {
+    let path = draft_path(&app)?;
+    let json = serde_json::to_string(&input).map_err(|e| e.to_string())?;
+    // フォルダの作成は tauri_plugin_fs に API がないので std::fs を使う（アプリ専用のフォルダで、content:// URI にはならない）
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("保存先を作成できません: {e}"))?;
+    }
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    app.fs()
+        .open(path, opts)
+        .and_then(|mut f| f.write_all(json.as_bytes()))
+        .map_err(|e| format!("自動保存に失敗しました: {e}"))
+}
+
+/// 自動保存した下書きを読み込む。まだなければ `None`
+#[tauri::command]
+async fn load_draft(app: AppHandle) -> Result<Option<TaxInput>, String> {
+    let path = draft_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text = app.fs().read_to_string(path).map_err(|e| format!("読み込みに失敗しました: {e}"))?;
+    serde_json::from_str::<TaxInput>(&text)
+        .map(|input| Some(input.normalized()))
+        .map_err(|e| format!("下書きの形式が正しくありません: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,7 +127,9 @@ pub fn run() {
             calculate,
             prefectures,
             save_scenario,
-            load_scenario
+            load_scenario,
+            save_draft,
+            load_draft
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
