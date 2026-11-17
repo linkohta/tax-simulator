@@ -36,6 +36,10 @@ pub fn input_warnings(input: &TaxInput, total_income: i64) -> Vec<String> {
         ));
     }
 
+    let si = &input.social_insurance;
+    if si.mode == SocialInsuranceMode::Auto && si.health_plan == HealthPlan::Custom && si.custom_health_rate_x1000 <= 0 {
+        w.push("健康保険料率が入力されていないため、健康保険料を0円として概算しています。".into());
+    }
     if input.social_insurance.mode == SocialInsuranceMode::Auto {
         if input.age >= HEALTH_AGE_UNTIL {
             w.push("75歳以上は健康保険・厚生年金の対象外として概算しています。後期高齢者医療制度の保険料は「その他に支払った社会保険料」に入力してください。".into());

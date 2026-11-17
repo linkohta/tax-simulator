@@ -306,6 +306,8 @@ pub static KYOKAI_KENPO_RATES: &[(&str, i64)] = &[
     ("沖縄県", 9_440),
 ];
 
+/// 労使折半：労使合計の料率を本人負担分にするための除数
+pub const EMPLOYER_SPLIT: i64 = 2;
 /// 介護保険料率（40〜64歳、労使合計）
 pub const CARE_RATE: i64 = 1_620;
 /// 介護保険第2号被保険者の年齢（40歳以上65歳未満。介護保険法9条2号）

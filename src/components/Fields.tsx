@@ -59,6 +59,59 @@ export function MoneyInput(props: {
   );
 }
 
+/** 1/1000 %単位の整数を「4.925」のような%表記にする（末尾の0は省く） */
+const rateText = (v: number) => {
+  const s = String(Math.max(0, Math.trunc(v))).padStart(4, "0");
+  return `${s.slice(0, -3)}.${s.slice(-3)}`.replace(/\.?0+$/, "");
+};
+
+/** 率の入力（%、小数3桁まで）。値は 1/1000 %単位の整数で持つ（4.925% → 4925） */
+export function RateInput(props: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  hint?: ReactNode;
+}) {
+  const { label, value, onChange, hint } = props;
+  const [text, setText] = useState(rateText(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(rateText(value));
+  }, [value, focused]);
+
+  const handle = (raw: string) => {
+    const cleaned = raw
+      .replace(/[０-９．]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+      .replace(/\s/g, "");
+    // 整数部2桁・小数部3桁まで（100%未満）
+    if (!/^\d{0,2}(\.\d{0,3})?$/.test(cleaned)) return;
+    setText(cleaned);
+    const [int = "", frac = ""] = cleaned.split(".");
+    // 浮動小数点を経由せず、文字列から 1/1000 %単位の整数にする
+    onChange(Number(int || "0") * 1000 + Number(frac.padEnd(3, "0")));
+  };
+
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <span className="field-input">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={text}
+          placeholder="0"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onChange={(e) => handle(e.target.value)}
+        />
+        <span className="suffix">%</span>
+      </span>
+      {hint && <span className="field-hint">{hint}</span>}
+    </label>
+  );
+}
+
 export function NumberInput(props: {
   label: string;
   value: number;

@@ -5,6 +5,7 @@ export type WidowStatus = "none" | "widow" | "singleMother" | "singleFather";
 export type DividendMode = "noDeclare" | "comprehensive" | "separate";
 export type MedicalMode = "normal" | "selfMedication";
 export type SocialInsuranceMode = "auto" | "manual";
+export type HealthPlan = "kyokai" | "custom";
 
 export interface SpouseInput {
   age: number;
@@ -70,7 +71,12 @@ export interface TaxInput {
     manualAmount: number;
     monthlySalary: number;
     bonuses: number[];
+    healthPlan: HealthPlan;
     prefecture: string;
+    /** 健保組合などの本人負担分の料率（1/1000 %単位。4.5% → 4500） */
+    customHealthRateX1000: number;
+    customCareRateX1000: number;
+    customChildcareSupportRateX1000: number;
     employmentInsurance: boolean;
     childcareSupportMonths: number;
     otherAmount: number;
@@ -217,7 +223,12 @@ export const defaultInput =(): TaxInput => ({
     manualAmount: 0,
     monthlySalary: 350_000,
     bonuses: [400_000, 400_000],
+    healthPlan: "kyokai",
     prefecture: "東京都",
+    // 健保組合などを選んだときの初期値：協会けんぽ（東京都）の本人負担分と同じ（Rust 側の Default と合わせる）
+    customHealthRateX1000: 4_925,
+    customCareRateX1000: 810,
+    customChildcareSupportRateX1000: 115,
     employmentInsurance: true,
     childcareSupportMonths: 8,
     otherAmount: 0,

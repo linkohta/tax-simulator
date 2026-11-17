@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::params::{CARE_RATE, CHILDCARE_SUPPORT_RATE, EMPLOYER_SPLIT, KYOKAI_KENPO_FALLBACK_PREFECTURE, KYOKAI_KENPO_RATES};
+
 // ───────────────────────────── 入力 ─────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -37,6 +39,16 @@ pub enum SocialInsuranceMode {
     Manual,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HealthPlan {
+    /// 協会けんぽ（都道府県別の料率を労使折半）
+    #[default]
+    Kyokai,
+    /// 健康保険組合など（本人負担分の料率を入力）
+    Custom,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SocialInsuranceInput {
@@ -47,8 +59,16 @@ pub struct SocialInsuranceInput {
     pub monthly_salary: i64,
     /// Auto 時：賞与（1回ごとの支給額）
     pub bonuses: Vec<i64>,
+    /// Auto 時：健康保険の種類
+    pub health_plan: HealthPlan,
     /// Auto 時：協会けんぽの都道府県
     pub prefecture: String,
+    /// Auto・健保組合など：健康保険料率の本人負担分（1/1000 %単位。4.5% → 4_500）
+    pub custom_health_rate_x1000: i64,
+    /// Auto・健保組合など：介護保険料率の本人負担分（1/1000 %単位）
+    pub custom_care_rate_x1000: i64,
+    /// Auto・健保組合など：子ども・子育て支援金率の本人負担分（1/1000 %単位）
+    pub custom_childcare_support_rate_x1000: i64,
     /// Auto 時：雇用保険の対象か
     pub employment_insurance: bool,
     /// Auto 時：子ども・子育て支援金を負担する月数（2026年は4月分から。翌月徴収なら年内は8か月）
@@ -64,7 +84,15 @@ impl Default for SocialInsuranceInput {
             manual_amount: 0,
             monthly_salary: 0,
             bonuses: Vec::new(),
-            prefecture: "東京都".into(),
+            health_plan: HealthPlan::Kyokai,
+            prefecture: KYOKAI_KENPO_FALLBACK_PREFECTURE.into(),
+            // 健保組合などの料率の初期値は、協会けんぽ（東京都）の本人負担分と同じにしておく
+            custom_health_rate_x1000: KYOKAI_KENPO_RATES
+                .iter()
+                .find(|(p, _)| *p == KYOKAI_KENPO_FALLBACK_PREFECTURE)
+                .map_or(0, |(_, r)| r / EMPLOYER_SPLIT),
+            custom_care_rate_x1000: CARE_RATE / EMPLOYER_SPLIT,
+            custom_childcare_support_rate_x1000: CHILDCARE_SUPPORT_RATE / EMPLOYER_SPLIT,
             employment_insurance: true,
             childcare_support_months: 8,
             other_amount: 0,
