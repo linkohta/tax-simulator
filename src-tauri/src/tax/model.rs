@@ -217,18 +217,78 @@ pub enum DividendMode {
     Separate,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StockAccountKind {
+    /// 特定口座（源泉徴収あり）：申告するかどうかを選べる
+    #[default]
+    Withholding,
+    /// 特定口座（源泉徴収なし）：申告が必要
+    NoWithholding,
+    /// 一般口座：申告が必要
+    General,
+}
+
+/// 上場株式等の口座ごとの譲渡損益
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StockAccount {
+    pub name: String,
+    pub kind: StockAccountKind,
+    /// 年間の譲渡損益（マイナスは損失）
+    pub capital_gain: i64,
+    /// 源泉徴収ありの特定口座の損益を申告する（ほかの種類の口座では使わない）
+    pub declare: bool,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct StockInput {
-    /// 上場株式等の配当等（税引前）
+    /// 上場株式等の配当等（税引前）のうち剰余金の配当等（国内株式・国内株式ETFなど。配当控除率10%）
     pub dividends: i64,
+    /// 同、証券投資信託の収益の分配（外貨建資産・株式以外の割合が50%以下。配当控除率5%）
+    pub dividends_fund: i64,
+    /// 同、外貨建等証券投資信託の収益の分配（同割合が50%超75%以下。配当控除率2.5%）
+    pub dividends_foreign_fund: i64,
+    /// 同、配当控除の対象外（外国株式、J-REIT、同割合75%超の投資信託など）
+    pub dividends_no_credit: i64,
     pub dividend_mode: DividendMode,
-    /// 上場株式等の譲渡損益（年間通算後、マイナスは損失）
-    pub capital_gain: i64,
-    /// 譲渡所得を申告する（源泉徴収なし口座・一般口座の場合や損益通算時は申告）
-    pub declare_capital_gain: bool,
+    /// 口座ごとの譲渡損益
+    pub accounts: Vec<StockAccount>,
     /// 前年以前から繰り越された上場株式等の譲渡損失
     pub loss_carryforward: i64,
+    /// 国外所得金額（外国株式の配当など。外国所得税を引く前）
+    pub foreign_income: i64,
+    /// その年に納付した外国所得税額
+    pub foreign_tax_paid: i64,
+    /// 旧形式：全口座を合算した譲渡損益。読込時に `accounts` へ移す（[`TaxInput::normalized`]）
+    #[serde(skip_serializing)]
+    pub capital_gain: i64,
+    /// 旧形式：譲渡損益を申告する
+    #[serde(skip_serializing)]
+    pub declare_capital_gain: bool,
+}
+
+/// 旧形式の譲渡損益を移した口座の名前
+const LEGACY_STOCK_ACCOUNT_NAME: &str = "特定口座";
+
+impl TaxInput {
+    /// 旧形式の保存ファイルの項目を現在の形式に直したものを返す
+    pub fn normalized(&self) -> TaxInput {
+        let mut out = self.clone();
+        let st = &mut out.stocks;
+        if st.capital_gain != 0 || st.declare_capital_gain {
+            st.accounts.push(StockAccount {
+                name: LEGACY_STOCK_ACCOUNT_NAME.into(),
+                kind: StockAccountKind::Withholding,
+                capital_gain: st.capital_gain,
+                declare: st.declare_capital_gain,
+            });
+            st.capital_gain = 0;
+            st.declare_capital_gain = false;
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -238,6 +298,9 @@ pub struct HousingLoanInput {
     pub credit_amount: i64,
     /// 令和8年以後に居住を開始した（住民税の控除限度額の計算が異なる）
     pub moved_in_2026_or_later: bool,
+    /// 住民税の控除限度額が7%・136,500円になる入居
+    /// （平成26年4月〜令和3年12月入居で消費税率8%・10%の特定取得など）
+    pub specific_acquisition: bool,
 }
 
 // ───────────────────────────── 出力 ─────────────────────────────
@@ -251,8 +314,31 @@ pub struct TaxResult {
     pub resident_tax: ResidentTaxDetail,
     pub stock_withholding: StockWithholding,
     pub furusato: FurusatoResult,
+    /// 株式の課税方式ごとの税額（配当も源泉徴収ありの口座の損益もなければ空）
+    pub stock_options: Vec<StockOption>,
     pub summary: Summary,
     pub warnings: Vec<String>,
+}
+
+/// 株式の課税方式を1つ選んだときの税額
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StockOption {
+    pub dividend_mode: DividendMode,
+    /// 源泉徴収ありの特定口座の譲渡損益を申告するか（損益のある該当口座がなければ `None`）
+    pub declare_withholding_accounts: Option<bool>,
+    pub income_tax: i64,
+    pub resident_tax: i64,
+    pub stock_withholding: i64,
+    /// 所得税＋住民税＋申告不要とした分の源泉徴収税
+    pub total_tax: i64,
+    pub loss_carried_to_next_year: i64,
+    /// 現在の入力での税額合計との差（マイナスなら有利）
+    pub diff_from_current: i64,
+    /// 現在の入力と同じ方式か
+    pub is_current: bool,
+    /// 税額合計が最も少ない方式か
+    pub is_best: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -315,6 +401,8 @@ pub struct TaxDetail {
     pub base_tax: i64,
     /// 復興特別所得税
     pub reconstruction_tax: i64,
+    /// 外国税額控除（所得税分＋復興特別所得税分）
+    pub foreign_tax_credit: i64,
     /// 所得税及び復興特別所得税（100円未満切捨て）
     pub total: i64,
     /// 限界税率（%）

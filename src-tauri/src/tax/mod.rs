@@ -1,9 +1,14 @@
 //! 令和8年分所得税・令和9年度住民税の計算エンジン
 
+pub mod comparison;
 pub mod deductions;
+pub mod foreign_tax;
+pub mod housing_loan;
 pub mod model;
 pub mod params;
 pub mod social;
+pub mod stocks;
+pub mod validation;
 
 #[cfg(test)]
 mod tests;
@@ -82,59 +87,21 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
 
     // ── 株式 ──
     let st = &input.stocks;
-    let dividends = st.dividends.max(0);
-    let div_comp = if st.dividend_mode == DividendMode::Comprehensive { dividends } else { 0 };
-    let mut div_sep = if st.dividend_mode == DividendMode::Separate { dividends } else { 0 };
-    let mut gain = if st.declare_capital_gain { st.capital_gain } else { 0 };
-    let mut loss_next = 0;
-    if gain < 0 {
-        // 上場株式等の譲渡損失と申告分離の配当との損益通算
-        let offset = (-gain).min(div_sep);
-        div_sep -= offset;
-        loss_next += -gain - offset;
-        gain = 0;
-        if st.dividend_mode != DividendMode::Separate && dividends > 0 {
-            warnings.push("譲渡損失を配当と損益通算するには、配当を「申告分離課税」で申告する必要があります。".into());
-        }
-    }
-    let total_income_it = salary_net_it + div_comp + div_sep + gain; // 合計所得金額（繰越控除前）
-    let total_income_rt = salary_net_rt + div_comp + div_sep + gain;
-    // 繰越損失の控除（申告が前提）
-    let declares_separately = st.declare_capital_gain || st.dividend_mode == DividendMode::Separate;
-    let mut carry = if declares_separately { st.loss_carryforward.max(0) } else { 0 };
-    if st.loss_carryforward > 0 && !declares_separately {
-        warnings.push("繰越損失を控除するには、譲渡損益または配当を申告分離で申告する必要があります。".into());
-    }
-    let use_gain = carry.min(gain);
-    gain -= use_gain;
-    carry -= use_gain;
-    let use_div = carry.min(div_sep);
-    div_sep -= use_div;
-    carry -= use_div;
-    if declares_separately {
-        loss_next += carry;
-    }
+    let stock = stocks::stock_income(st);
+    warnings.extend(stock.warnings.iter().cloned());
+    let dividends = stock.dividends_total;
+    let div_comp = stock.div_comp.total();
+    let (div_sep, gain, loss_next) = (stock.div_sep, stock.gain, stock.loss_next);
+    let total_income_it = salary_net_it + div_comp + stock.separate_before_carry; // 合計所得金額（繰越控除前）
+    let total_income_rt = salary_net_rt + div_comp + stock.separate_before_carry;
     let separate_income = div_sep + gain;
     let ordinary_it = salary_net_it + div_comp;
     let ordinary_rt = salary_net_rt + div_comp;
     let total_base_it = ordinary_it + separate_income; // 総所得金額等
     let total_base_rt = ordinary_rt + separate_income;
 
-    // 申告不要とした株式の源泉徴収
-    let mut wh_it = 0;
-    let mut wh_rt = 0;
-    if st.dividend_mode == DividendMode::NoDeclare {
-        wh_it += mul_div(dividends, STOCK_IT_RATE_X1000, 100_000);
-        wh_rt += dividends * STOCK_RT_RATE_PCT / 100;
-    }
-    if !st.declare_capital_gain && st.capital_gain > 0 {
-        wh_it += mul_div(st.capital_gain, STOCK_IT_RATE_X1000, 100_000);
-        wh_rt += st.capital_gain * STOCK_RT_RATE_PCT / 100;
-    }
-
-    // 申告不要とした株式の所得（ミニマム税の目安判定用）
-    let wh_base = if st.dividend_mode == DividendMode::NoDeclare { dividends } else { 0 }
-        + if !st.declare_capital_gain { st.capital_gain.max(0) } else { 0 };
+    // 申告不要とした株式の源泉徴収と、その所得（ミニマム税の目安判定用）
+    let (wh_it, wh_rt, wh_base) = (stock.wh_it, stock.wh_rt, stock.wh_base);
 
     // ── 確定申告の要否とワンストップ特例 ──
     let furusato_count = input.donations.furusato.iter().filter(|e| e.amount > 0).count();
@@ -147,8 +114,11 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     if st.dividend_mode != DividendMode::NoDeclare && dividends > 0 {
         filing_reasons.push("配当の申告");
     }
-    if st.declare_capital_gain {
+    if stock.declares_gain {
         filing_reasons.push("株式譲渡の申告");
+    }
+    if st.foreign_tax_paid > 0 && st.dividend_mode != DividendMode::NoDeclare {
+        filing_reasons.push("外国税額控除");
     }
     if other_donations > 0 {
         filing_reasons.push("その他の寄附金控除");
@@ -222,11 +192,10 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
 
     // 配当控除（総合課税分）
     let taxable_total_it = taxable_ord_it + taxable_sep_it;
-    if div_comp > 0 {
-        let c = dividend_credit(div_comp, taxable_total_it, DIVIDEND_CREDIT_IT);
-        let c = c.min(tax_it);
-        tax_it -= c;
-        credits_it.push(DeductionItem { label: "配当控除".into(), amount: c });
+    let div_credit_it = stocks::dividend_credit(&stock.div_comp, taxable_total_it, &DIVIDEND_CREDIT_IT).min(tax_it);
+    if div_credit_it > 0 {
+        tax_it -= div_credit_it;
+        credits_it.push(DeductionItem { label: "配当控除".into(), amount: div_credit_it });
     }
     // 住宅借入金等特別控除
     let hl_total = input.housing_loan.credit_amount.max(0);
@@ -237,7 +206,11 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     }
     let base_tax = tax_it;
     let reconstruction = base_tax * RECONSTRUCTION_RATE_X1000 / 100_000;
-    let income_tax_total = floor_to(base_tax + reconstruction, 100);
+    // 外国税額控除。復興特別所得税は外国税額控除前の所得税額（基準所得税額）に対してかかる
+    let (ftc, ftc_warnings) = foreign_tax::for_stocks(st, total_income_it, base_tax, reconstruction);
+    warnings.extend(ftc_warnings);
+    let ftc_it = ftc.income_tax + ftc.reconstruction;
+    let income_tax_total = floor_to(base_tax + reconstruction - ftc_it, 100);
     let marginal = marginal_bracket(taxable_ord_it);
 
     // ── 住民税 ──
@@ -282,20 +255,15 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     // 配当控除
     if div_comp > 0 {
         let taxable_total_rt = taxable_ord_rt + taxable_sep_rt;
-        let m = dividend_credit(div_comp, taxable_total_rt, DIVIDEND_CREDIT_RT_MUNI);
-        let p = dividend_credit(div_comp, taxable_total_rt, DIVIDEND_CREDIT_RT_PREF);
+        let m = stocks::dividend_credit(&stock.div_comp, taxable_total_rt, &DIVIDEND_CREDIT_RT_MUNI);
+        let p = stocks::dividend_credit(&stock.div_comp, taxable_total_rt, &DIVIDEND_CREDIT_RT_PREF);
         apply(&mut levy, "配当控除", [m, p], &mut credits_rt);
     }
 
     // 住宅借入金等特別控除（所得税で引ききれなかった分）
     let hl_rest = hl_total - hl_it;
     if hl_rest > 0 {
-        // 限度額は所得税の課税総所得金額等×5%。令和7年以前の居住分は基礎控除の48万円超過分を加算
-        let mut base = taxable_ord_it + taxable_sep_it;
-        if !input.housing_loan.moved_in_2026_or_later {
-            base += basic_excess;
-        }
-        let cap = (base * HOUSING_LOAN_RT_RATE_PCT / 100).min(HOUSING_LOAN_RT_CAP);
+        let cap = housing_loan::resident_limit(&input.housing_loan, taxable_total_it, basic_excess);
         let amt = hl_rest.min(cap);
         apply(&mut levy, "住宅借入金等特別控除", [amt * 3 / 5, amt - amt * 3 / 5], &mut credits_rt);
     }
@@ -327,6 +295,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
             }
         }
     }
+    // 外国税額控除（所得税・復興特別所得税で引ききれなかった分）
+    apply(&mut levy, "外国税額控除", ftc.resident, &mut credits_rt);
     levy = [floor_to(levy[0], 100), floor_to(levy[1], 100)];
 
     // 非課税判定（標準：1級地）
@@ -343,7 +313,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     let resident_total = income_levy + per_capita;
 
     // ── 警告 ──
-    if total_income_it + wh_base > 300_000_000 {
+    if total_income_it + wh_base > MINIMUM_TAX_THRESHOLD {
         warnings.push("基準所得金額3.3億円超の場合の「極めて高い水準の所得に対する負担の適正化措置」は考慮していません。".into());
     }
     if st.dividend_mode != DividendMode::NoDeclare && dividends > 0 {
@@ -351,9 +321,9 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
     }
 
     let stock_wh = wh_it + wh_rt;
-    let gross = salary + dividends + st.capital_gain.max(0);
+    let gross = salary + dividends + stock.net_gain.max(0);
     let total_tax = income_tax_total + resident_total + stock_wh;
-    let take_home = salary + dividends + st.capital_gain - si.total - total_tax;
+    let take_home = salary + dividends + stock.net_gain - si.total - total_tax;
     let effective = if gross > 0 { total_tax as f64 / gross as f64 * 100.0 } else { 0.0 };
 
     let result = TaxResult {
@@ -380,6 +350,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
             credits: credits_it,
             base_tax,
             reconstruction_tax: reconstruction,
+            foreign_tax_credit: ftc_it,
             total: income_tax_total,
             marginal_rate: marginal.rate_pct as f64,
         },
@@ -398,6 +369,7 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
         },
         stock_withholding: StockWithholding { income_tax: wh_it, resident_tax: wh_rt },
         furusato: FurusatoResult::default(),
+        stock_options: Vec::new(),
         summary: Summary {
             gross_income: gross,
             social_insurance: si.total,
@@ -412,20 +384,6 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
         warnings,
     };
     Computed { result, one_stop }
-}
-
-/// 配当控除額（rate は 1/1000 %単位の [1,000万以下部分, 超過部分]）
-fn dividend_credit(div: i64, taxable_total: i64, rate: [i64; 2]) -> i64 {
-    let limit = 10_000_000;
-    let (low, high) = if taxable_total <= limit {
-        (div, 0)
-    } else if taxable_total - div >= limit {
-        (0, div)
-    } else {
-        let low = limit - (taxable_total - div);
-        (low, div - low)
-    };
-    mul_div(low, rate[0], 100_000) + mul_div(high, rate[1], 100_000)
 }
 
 /// ふるさと納税の特例控除割合の区分を決める
@@ -461,10 +419,12 @@ fn fmt_yen(n: i64) -> String {
 
 /// 公開API：入力から計算結果（ふるさと納税上限の目安を含む）を返す
 pub fn calculate(input: &TaxInput) -> TaxResult {
+    let input = &input.normalized();
     let furusato_total: i64 = input.donations.furusato.iter().map(|e| e.amount.max(0)).sum();
     let one_stop = input.donations.one_stop;
     let current = compute(input, furusato_total, one_stop);
     let mut result = current.result;
+    result.warnings.extend(validation::input_warnings(input, result.income.total_income_for_tests));
 
     // 寄附なしの税額と比較
     let base = compute(input, 0, one_stop).result;
@@ -506,6 +466,7 @@ pub fn calculate(input: &TaxInput) -> TaxResult {
         ));
     }
 
+    result.stock_options = comparison::stock_options(input, furusato_total, one_stop, result.summary.total_tax);
     result.furusato = FurusatoResult {
         current_total: furusato_total,
         limit,

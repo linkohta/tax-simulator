@@ -106,7 +106,7 @@ pub fn estimate(input: &SocialInsuranceInput, age: u32) -> SocialInsuranceBreakd
     let std_h = standard_monthly_health(monthly);
     let std_p = standard_monthly_pension(monthly);
     let health_rate = kyokai_rate(&input.prefecture);
-    let care_applies = (40..65).contains(&age);
+    let care_applies = (CARE_AGE_FROM..CARE_AGE_UNTIL).contains(&age);
     let support_months = input.childcare_support_months.min(12) as i64;
 
     let mut health = employee_share(std_h, health_rate) * 12;
@@ -130,6 +130,16 @@ pub fn estimate(input: &SocialInsuranceInput, age: u32) -> SocialInsuranceBreakd
             support += employee_share(h_b, CHILDCARE_SUPPORT_RATE) * support_months / 12;
         }
         pension += employee_share(p_b, PENSION_RATE);
+    }
+
+    // 年齢による被保険者資格：健康保険（子ども・子育て支援金を含む）は75歳未満、厚生年金は70歳未満
+    if age >= HEALTH_AGE_UNTIL {
+        health = 0;
+        care = 0;
+        support = 0;
+    }
+    if age >= PENSION_AGE_UNTIL {
+        pension = 0;
     }
 
     let employment = if input.employment_insurance {
@@ -181,6 +191,40 @@ mod tests {
         assert_eq!(standard_monthly_health(2_000_000), 1_390_000);
         assert_eq!(standard_monthly_pension(50_000), 88_000);
         assert_eq!(standard_monthly_pension(1_000_000), PENSION_STANDARD_MAX);
+    }
+
+    fn at_age(age: u32) -> SocialInsuranceBreakdown {
+        let input = SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![700_000], ..Default::default() };
+        estimate(&input, age)
+    }
+
+    #[test]
+    fn age_limits() {
+        // 東京都：健保 300,000×9.85%/2 = 14,775、賞与 700,000×9.85%/2 = 34,475
+        let health = 14_775 * 12 + 34_475;
+        // 厚年 300,000×18.3%/2 = 27,450、賞与 64,050
+        let pension = 27_450 * 12 + 64_050;
+        // 介護 300,000×1.62%/2 = 2,430、賞与 5,670
+        let care = 2_430 * 12 + 5_670;
+        // 雇用 1,500×12 + 3,500（年齢によらない）
+        let employment = 1_500 * 12 + 3_500;
+
+        // 介護保険：40歳以上65歳未満
+        assert_eq!(at_age(39).care, 0);
+        assert_eq!(at_age(40).care, care);
+        assert_eq!(at_age(64).care, care);
+        assert_eq!(at_age(65).care, 0);
+        // 厚生年金：70歳未満
+        assert_eq!(at_age(69).pension, pension);
+        assert_eq!(at_age(70).pension, 0);
+        assert_eq!(at_age(70).health, health);
+        // 健康保険・子ども子育て支援金：75歳未満
+        assert_eq!(at_age(74).health, health);
+        assert!(at_age(74).childcare_support > 0);
+        let s = at_age(75);
+        assert_eq!((s.health, s.care, s.childcare_support, s.pension), (0, 0, 0, 0));
+        assert_eq!(s.employment, employment);
+        assert_eq!(s.total, employment);
     }
 
     #[test]

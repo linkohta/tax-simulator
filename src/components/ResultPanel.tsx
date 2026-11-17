@@ -1,4 +1,4 @@
-import { DeductionItem, TaxResult } from "../types";
+import { DeductionItem, DividendMode, StockOption, TaxResult } from "../types";
 import { yen } from "./Fields";
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
@@ -6,8 +6,8 @@ const pct = (n: number) => `${n.toFixed(2)}%`;
 function Rows({ items }: { items: DeductionItem[] }) {
   return (
     <>
-      {items.map((d) => (
-        <tr key={d.label}>
+      {items.map((d, i) => (
+        <tr key={`${i}:${d.label}`}>
           <td className="indent">{d.label}</td>
           <td className="num">{yen(d.amount)}</td>
         </tr>
@@ -22,6 +22,62 @@ function Row({ label, value, strong, minus }: { label: string; value: number; st
       <td>{label}</td>
       <td className="num">{minus && value > 0 ? "△ " : ""}{yen(value)}</td>
     </tr>
+  );
+}
+
+const DIVIDEND_MODE_LABELS: Record<DividendMode, string> = {
+  noDeclare: "配当：申告不要",
+  comprehensive: "配当：総合課税",
+  separate: "配当：申告分離",
+};
+
+const signedYen = (n: number) => (n > 0 ? "+" : n === 0 ? "±" : "") + yen(n);
+
+/** 株式の課税方式ごとの税額の比較表 */
+function StockOptions({ options }: { options: StockOption[] }) {
+  const hasDividends = options.some((o) => o.dividendMode !== options[0].dividendMode);
+  return (
+    <details open>
+      <summary>株式の課税方式の比較</summary>
+      <table className="compare">
+        <thead>
+          <tr>
+            <th>方式</th>
+            <th className="num">税額合計</th>
+            <th className="num">現在との差</th>
+          </tr>
+        </thead>
+        <tbody>
+          {options.map((o, i) => (
+            <tr key={i} className={o.isCurrent ? "current" : undefined}>
+              <td>
+                {[
+                  hasDividends ? DIVIDEND_MODE_LABELS[o.dividendMode] : "",
+                  o.declareWithholdingAccounts === null
+                    ? ""
+                    : o.declareWithholdingAccounts
+                      ? "譲渡：申告する"
+                      : "譲渡：申告しない",
+                ]
+                  .filter(Boolean)
+                  .join("／")}
+                {o.isBest && <span className="tag best">最も有利</span>}
+                {o.isCurrent && <span className="tag">現在</span>}
+                {o.lossCarriedToNextYear > 0 && (
+                  <span className="field-hint">翌年に繰り越す損失 {yen(o.lossCarriedToNextYear)}</span>
+                )}
+              </td>
+              <td className="num">{yen(o.totalTax)}</td>
+              <td className="num">{signedYen(o.diffFromCurrent)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="meta">
+        税額合計は所得税・住民税・申告不要とした分の源泉徴収税の合計です。「譲渡」は源泉徴収ありの特定口座をすべて申告する／しない場合です。
+        申告すると合計所得金額が増え、国民健康保険料や扶養の判定などに影響することがあります（この比較には含めていません）。
+      </p>
+    </details>
   );
 }
 
@@ -71,8 +127,8 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
 
       {result.warnings.length > 0 && (
         <ul className="warnings">
-          {result.warnings.map((w) => (
-            <li key={w}>{w}</li>
+          {result.warnings.map((w, i) => (
+            <li key={`${i}:${w}`}>{w}</li>
           ))}
         </ul>
       )}
@@ -140,6 +196,7 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
             <Rows items={it.credits} />
             <Row label="基準所得税額" value={it.baseTax} />
             <Row label="復興特別所得税（2.1%）" value={it.reconstructionTax} />
+            {it.foreignTaxCredit > 0 && <Row label="外国税額控除" value={it.foreignTaxCredit} minus />}
             <Row label="所得税及び復興特別所得税" value={it.total} strong />
           </tbody>
         </table>
@@ -175,6 +232,8 @@ export function ResultPanel({ result }: { result: TaxResult | null }) {
           </table>
         </details>
       )}
+
+      {result.stockOptions.length > 0 && <StockOptions options={result.stockOptions} />}
 
       <p className="disclaimer">
         本アプリの結果は概算です。実際の税額は勤務先の年末調整・確定申告・自治体の賦課決定によります。

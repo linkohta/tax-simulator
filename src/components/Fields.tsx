@@ -4,6 +4,9 @@ export const yen = (n: number) => n.toLocaleString("ja-JP") + " 円";
 
 const fmt = (n: number) => (n === 0 ? "" : n.toLocaleString("ja-JP"));
 
+/** 金額入力の最大桁数（9,999億円まで。Rust 側の i64 に収まり、計算途中でも桁あふれしない範囲） */
+const MONEY_MAX_DIGITS = 12;
+
 /** 3桁区切り表示の金額入力 */
 export function MoneyInput(props: {
   label: string;
@@ -27,6 +30,7 @@ export function MoneyInput(props: {
     );
     const pattern = allowNegative ? /^-?\d*$/ : /^\d*$/;
     if (!pattern.test(cleaned)) return;
+    if (cleaned.replace("-", "").length > MONEY_MAX_DIGITS) return;
     setText(cleaned);
     const n = Number(cleaned);
     onChange(Number.isFinite(n) ? n : 0);

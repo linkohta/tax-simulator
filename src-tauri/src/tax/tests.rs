@@ -127,11 +127,98 @@ fn stock_loss_offset() {
         capital_gain: -500_000,
         declare_capital_gain: true,
         loss_carryforward: 0,
+        ..Default::default()
     };
+    // 旧形式（合算の譲渡損益）の入力も、口座1つとして同じ結果になる
     let r = calculate(&input);
     assert_eq!(r.income.dividend_separate, 0);
     assert_eq!(r.income.loss_carried_to_next_year, 200_000);
     assert_eq!(r.income_tax.tax_on_separate, 0);
+}
+
+#[test]
+fn legacy_stock_fields_are_migrated() {
+    let json = r#"{"stocks":{"dividends":300000,"capitalGain":-500000,"declareCapitalGain":true}}"#;
+    let input: TaxInput = serde_json::from_str(json).unwrap();
+    let n = input.normalized();
+    assert_eq!(n.stocks.accounts.len(), 1);
+    let a = &n.stocks.accounts[0];
+    assert_eq!((a.kind, a.capital_gain, a.declare), (StockAccountKind::Withholding, -500_000, true));
+    // 保存し直すと旧形式の項目は出力されない
+    let saved = serde_json::to_string(&n).unwrap();
+    assert!(!saved.contains("declareCapitalGain"));
+    assert!(saved.contains("\"accounts\""));
+}
+
+#[test]
+fn stock_options_compare_dividend_modes() {
+    let mut input = single(5_000_000, 750_000);
+    input.stocks.dividends = 200_000;
+    let r = calculate(&input);
+    let total = |mode: DividendMode| r.stock_options.iter().find(|o| o.dividend_mode == mode).unwrap();
+    assert_eq!(r.stock_options.len(), 3);
+    // 申告不要：所得税 90,300 + 住民税 240,500 + 源泉 20万×20.315% = 40,630
+    let no = total(DividendMode::NoDeclare);
+    assert_eq!(no.total_tax, 90_300 + 240_500 + 40_630);
+    assert!(no.is_current && !no.is_best);
+    assert_eq!(no.diff_from_current, 0);
+    // 総合課税：所得税 課税197万 → 99,500 − 配当控除 20,000 = 79,500、復興税 1,669 → 81,100
+    //           住民税 課税258万 → 258,000 − 調整控除 2,500 − 配当控除 5,600 = 249,900 + 5,000
+    let comp = total(DividendMode::Comprehensive);
+    assert_eq!((comp.income_tax, comp.resident_tax, comp.stock_withholding), (81_100, 254_900, 0));
+    assert!(comp.is_best);
+    assert_eq!(comp.diff_from_current, 336_000 - 371_430);
+    // 申告分離：所得税 88,500 + 30,000 = 118,500、復興税 2,488 → 120,900
+    //           住民税 238,000 + 10,000 − 2,500 = 245,500 + 5,000
+    let sep = total(DividendMode::Separate);
+    assert_eq!((sep.income_tax, sep.resident_tax), (120_900, 250_500));
+    assert!(!sep.is_best);
+
+    // 株式の入力がなければ比較しない
+    assert!(calculate(&single(5_000_000, 750_000)).stock_options.is_empty());
+}
+
+#[test]
+fn stock_options_include_declaring_withholding_accounts() {
+    let mut input = single(5_000_000, 750_000);
+    input.stocks.dividends = 300_000;
+    input.stocks.accounts = vec![StockAccount {
+        name: "A証券".into(),
+        kind: StockAccountKind::Withholding,
+        capital_gain: -500_000,
+        declare: false,
+    }];
+    let r = calculate(&input);
+    // 配当3方式 × 口座を申告する/しない
+    assert_eq!(r.stock_options.len(), 6);
+    let best = r.stock_options.iter().find(|o| o.is_best).unwrap();
+    // 損失を申告して配当を申告分離にすると、配当30万が損失と相殺されて株式の税がなくなり、20万を繰り越せる
+    assert_eq!(best.dividend_mode, DividendMode::Separate);
+    assert_eq!(best.declare_withholding_accounts, Some(true));
+    assert_eq!(best.total_tax, 90_300 + 240_500);
+    assert_eq!(best.loss_carried_to_next_year, 200_000);
+    assert_eq!(r.stock_options.iter().filter(|o| o.is_current).count(), 1);
+}
+
+#[test]
+fn foreign_tax_credit_on_separate_dividends() {
+    let mut input = single(5_000_000, 750_000);
+    input.stocks.dividends_no_credit = 100_000; // 外国株式の配当
+    input.stocks.dividend_mode = DividendMode::Separate;
+    input.stocks.foreign_income = 100_000;
+    input.stocks.foreign_tax_paid = 10_000;
+    let r = calculate(&input);
+    // 所得税 88,500 + 10万×15% = 103,500、復興税 2,173。合計所得 366万
+    // 控除限度額：所得税 2,827、復興税 59、道府県民税 339、市町村民税 508
+    assert_eq!(r.income_tax.base_tax, 103_500);
+    assert_eq!(r.income_tax.foreign_tax_credit, 2_827 + 59);
+    // 103,500 + 2,173 − 2,886 = 102,787 → 102,700
+    assert_eq!(r.income_tax.total, 102_700);
+    // 住民税：市 145,800 − 1,500 − 508 = 143,792 → 143,700、県 97,200 − 1,000 − 339 = 95,861 → 95,800
+    assert_eq!(r.resident_tax.income_levy, 143_700 + 95_800);
+    assert!(r.resident_tax.credits.iter().any(|c| c.label == "外国税額控除" && c.amount == 847));
+    assert!(r.warnings.iter().any(|w| w.contains("6,267円")));
+    assert!(r.summary.filing_required);
 }
 
 #[test]
@@ -142,6 +229,31 @@ fn dividend_comprehensive_credit() {
     let r = calculate(&input);
     assert!(r.income_tax.credits.iter().any(|c| c.label == "配当控除" && c.amount == 20_000));
     assert!(r.resident_tax.credits.iter().any(|c| c.label == "配当控除" && c.amount == 5_600));
+}
+
+#[test]
+fn housing_loan_spills_over_to_resident_tax() {
+    let mut input = single(5_000_000, 750_000);
+    input.housing_loan.credit_amount = 200_000;
+    let r = calculate(&input);
+    // 所得税 88,500 を全額控除 → 残り 111,500 を住民税から
+    assert_eq!(r.income_tax.total, 0);
+    // 限度額：(課税総所得 177万 + 基礎控除の48万円超過分 56万) × 5% = 116,500 → 上限 97,500
+    // 所得割 235,500 − 97,500 = 138,000
+    assert_eq!(r.resident_tax.income_levy, 138_000);
+
+    // 特定取得：233万 × 7% = 163,100 → 上限 136,500。残り 111,500 を全額控除
+    input.housing_loan.specific_acquisition = true;
+    let r = calculate(&input);
+    assert_eq!(r.resident_tax.income_levy, 235_500 - 111_500);
+}
+
+#[test]
+fn minimum_tax_warning_threshold() {
+    // 給与所得 = 収入 − 195万。基準所得金額 3.3億円ちょうどでは警告しない
+    let warned = |salary: i64| calculate(&single(salary, 0)).warnings.iter().any(|w| w.contains("負担の適正化措置"));
+    assert!(!warned(331_950_000));
+    assert!(warned(331_950_001));
 }
 
 #[test]

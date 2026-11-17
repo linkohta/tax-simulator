@@ -170,18 +170,40 @@ pub const RECONSTRUCTION_RATE_X1000: i64 = 2_100;
 pub const STOCK_IT_RATE_X1000: i64 = 15_315;
 pub const STOCK_RT_RATE_PCT: i64 = 5;
 
-/// 配当控除（1/1000 %単位）[課税総所得等1,000万円以下の部分, 超える部分]
-pub const DIVIDEND_CREDIT_IT: [i64; 2] = [10_000, 5_000];
-pub const DIVIDEND_CREDIT_RT_MUNI: [i64; 2] = [1_600, 800];
-pub const DIVIDEND_CREDIT_RT_PREF: [i64; 2] = [1_200, 600];
+/// 配当控除で率が変わる課税総所得金額等の区切り（所法92条）
+pub const DIVIDEND_CREDIT_THRESHOLD: i64 = 10_000_000;
+/// 配当控除率（1/1000 %単位）。
+/// 行は [剰余金の配当等, 証券投資信託, 外貨建等証券投資信託]、
+/// 列は [課税総所得金額等1,000万円以下の部分, 超える部分]。
+/// 所得税：所法92条・措法9条。住民税：地方税法附則5条
+pub const DIVIDEND_CREDIT_IT: [[i64; 2]; 3] = [[10_000, 5_000], [5_000, 2_500], [2_500, 1_250]];
+pub const DIVIDEND_CREDIT_RT_MUNI: [[i64; 2]; 3] = [[1_600, 800], [800, 400], [400, 200]];
+pub const DIVIDEND_CREDIT_RT_PREF: [[i64; 2]; 3] = [[1_200, 600], [600, 300], [300, 150]];
+
+/// 外国税額控除の住民税の控除限度額：所得税の控除限度額に対する率（%）。
+/// 道府県民税12%（地方税法施行令7条の19）、市町村民税18%（同48条の9の2）。指定都市の6%・24%は扱わない
+pub const FOREIGN_TAX_CREDIT_RT_PREF_PCT: i64 = 12;
+pub const FOREIGN_TAX_CREDIT_RT_MUNI_PCT: i64 = 18;
 
 // ───────────── 住民税 ─────────────
 
 /// 均等割（市町村3,000＋道府県1,000＋森林環境税1,000）
 pub const PER_CAPITA_TOTAL: i64 = 5_000;
-/// 住宅ローン控除の住民税控除上限
-pub const HOUSING_LOAN_RT_CAP: i64 = 97_500;
-pub const HOUSING_LOAN_RT_RATE_PCT: i64 = 5;
+/// 住宅ローン控除の住民税からの控除限度額（所得税の課税総所得金額等×率、上限あり）
+pub struct HousingLoanResidentLimit {
+    /// 所得税の課税総所得金額等に掛ける率（%）
+    pub rate_pct: i64,
+    /// 控除限度額の上限
+    pub cap: i64,
+}
+/// 原則：5%・97,500円（地方税法附則5条の4の2）
+pub const HOUSING_LOAN_RT_STANDARD: HousingLoanResidentLimit = HousingLoanResidentLimit { rate_pct: 5, cap: 97_500 };
+/// 平成26年4月〜令和3年12月入居で消費税率8%・10%の特定取得など：7%・136,500円（同条）
+pub const HOUSING_LOAN_RT_SPECIFIC: HousingLoanResidentLimit = HousingLoanResidentLimit { rate_pct: 7, cap: 136_500 };
+
+/// 「極めて高い水準の所得に対する負担の適正化措置」の対象となる基準所得金額（措法41条の19）。
+/// 令和7・8年分は3億3,000万円（令和8年度改正により、令和9年分以後は1億6,500万円）
+pub const MINIMUM_TAX_THRESHOLD: i64 = 330_000_000;
 /// 障害者・未成年・寡婦・ひとり親の非課税限度（合計所得）
 pub const RT_PROTECTED_INCOME_LIMIT: i64 = 1_350_000;
 
@@ -281,6 +303,13 @@ pub static KYOKAI_KENPO_RATES: &[(&str, i64)] = &[
 
 /// 介護保険料率（40〜64歳、労使合計）
 pub const CARE_RATE: i64 = 1_620;
+/// 介護保険第2号被保険者の年齢（40歳以上65歳未満。介護保険法9条2号）
+pub const CARE_AGE_FROM: u32 = 40;
+pub const CARE_AGE_UNTIL: u32 = 65;
+/// 健康保険の被保険者はこの年齢未満（75歳から後期高齢者医療制度。健康保険法3条1項7号）
+pub const HEALTH_AGE_UNTIL: u32 = 75;
+/// 厚生年金保険の被保険者はこの年齢未満（厚生年金保険法9条）
+pub const PENSION_AGE_UNTIL: u32 = 70;
 /// 子ども・子育て支援金率（労使合計）
 pub const CHILDCARE_SUPPORT_RATE: i64 = 230;
 /// 厚生年金保険料率 18.3%
