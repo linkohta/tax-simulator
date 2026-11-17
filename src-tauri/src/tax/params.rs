@@ -330,6 +330,11 @@ pub const PENSION_BONUS_PER_PAYMENT_CAP: i64 = 1_500_000;
 /// 雇用保険料率（労働者負担、1/10000単位：5/1000 → 50）
 pub const EMPLOYMENT_RATE: i64 = 50;
 
+/// 住民税の特別徴収（給与天引き）の回数：6月から翌年5月までの12回（地方税法321条の5）
+pub const RESIDENT_INSTALLMENTS: i64 = 12;
+/// 1年の月数
+pub const MONTHS_PER_YEAR: i64 = 12;
+
 // ───────────── 率の単位・端数 ─────────────
 
 /// 「1/1000 %単位」の率を金額に掛けるときの分母（9.85% = 9_850 / 100_000）

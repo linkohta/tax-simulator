@@ -175,6 +175,8 @@ export interface TaxResult {
     total: number;
     incomeLevyExempt: boolean;
     perCapitaExempt: boolean;
+    monthlyFirst: number;
+    monthlyRest: number;
   };
   stockWithholding: { incomeTax: number; residentTax: number };
   furusato: {
@@ -193,6 +195,7 @@ export interface TaxResult {
     stockWithholding: number;
     totalTax: number;
     takeHome: number;
+    takeHomeMonthly: number;
     effectiveTaxRate: number;
     filingRequired: boolean;
   };

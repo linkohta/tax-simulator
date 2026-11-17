@@ -45,6 +45,10 @@ fn single_5m() {
     assert_eq!(r.resident_tax.taxable_ordinary, 2_380_000);
     assert_eq!(r.resident_tax.income_levy, 235_500);
     assert_eq!(r.resident_tax.total, 240_500);
+    // 特別徴収：240,500 ÷ 12 → 7月以降 20,000、6月 20,500
+    assert_eq!((r.resident_tax.monthly_first, r.resident_tax.monthly_rest), (20_500, 20_000));
+    // 手取り 500万 − 社保75万 − 所得税 90,300 − 住民税 240,500 = 3,919,200 → 月平均 326,600
+    assert_eq!((r.summary.take_home, r.summary.take_home_monthly), (3_919_200, 326_600));
 }
 
 #[test]

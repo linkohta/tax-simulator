@@ -48,6 +48,7 @@ src-tauri/src/
     comparison.rs     株式の課税方式ごとの税額の比較
     foreign_tax.rs    外国税額控除
     housing_loan.rs   住宅ローン控除の住民税からの控除限度額
+    monthly.rs        年額を月ごとの額に直す（住民税の特別徴収、手取りの月平均）
     validation.rs     入力の矛盾などの警告
     tests.rs          手計算した例と照合する統合テスト
 src/

@@ -453,6 +453,10 @@ pub struct ResidentTaxDetail {
     pub total: i64,
     pub income_levy_exempt: bool,
     pub per_capita_exempt: bool,
+    /// 給与天引き（特別徴収）の場合の6月分の額
+    pub monthly_first: i64,
+    /// 同、7月〜翌年5月分の各月の額
+    pub monthly_rest: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -490,6 +494,8 @@ pub struct Summary {
     pub total_tax: i64,
     /// 手取り（給与＋株式の税引後）−iDeCo等の拠出は含めない
     pub take_home: i64,
+    /// 手取りの月平均（賞与・株式を含む年額 ÷ 12）
+    pub take_home_monthly: i64,
     pub effective_tax_rate: f64,
     pub filing_required: bool,
 }
