@@ -61,6 +61,22 @@ fn income_tax_brackets() {
 }
 
 #[test]
+fn income_adjustment_with_child() {
+    // 給与1,000万・23歳未満の扶養親族あり：所得金額調整控除 (1,000万 − 850万) × 10% = 15万
+    let mut input = single(10_000_000, 1_400_000);
+    input.family.dependents = vec![DependentInput { age: 10, ..Default::default() }];
+    let r = calculate(&input);
+    assert_eq!(r.income.income_adjustment_deduction, 150_000);
+    // 給与所得 1,000万 − 195万 − 15万 = 790万
+    assert_eq!(r.income.salary_net, 7_900_000);
+    // 所得税：790万 − 社保140万 − 基礎控除62万 = 588万 × 20% − 427,500 = 748,500、復興税 15,718 → 764,200
+    assert_eq!(r.income_tax.taxable_ordinary, 5_880_000);
+    assert_eq!(r.income_tax.total, 764_200);
+    // 子がいなければ調整控除なし
+    assert_eq!(calculate(&single(10_000_000, 1_400_000)).income.income_adjustment_deduction, 0);
+}
+
+#[test]
 fn adjustment_credit_under_2m() {
     // 給与300万 → 給与所得 300万 − (300万×30% + 8万) = 202万
     let r = calculate(&single(3_000_000, 450_000));

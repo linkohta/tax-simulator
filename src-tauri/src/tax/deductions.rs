@@ -35,10 +35,27 @@ pub fn salary_net(income: i64, kind: Kind) -> i64 {
         1_950_000
     };
     if formula <= min {
-        (income - min).max(0)
+        // 最低保障額が適用される範囲。端数表の上限（220万円）からは別表第五の4,000円刻みに入るので、
+        // 収入そのものではなく刻みの下端 a から引く（例：2,203,999円 → 2,200,000 − 740,000）
+        let step_from = SALARY_NET_SPECIAL.last().map_or(i64::MAX, |r| r.1);
+        let base = if income >= step_from { a } else { income };
+        (base - min).max(0)
     } else {
         a - formula
     }
+}
+
+/// 所得金額調整控除（子ども・特別障害者等を有する者等）
+///
+/// (給与収入（上限1,000万円）− 850万円) × 10%。1円未満の端数は切上げ。
+/// `eligible` は、本人が特別障害者、23歳未満の扶養親族がいる、
+/// 特別障害者の同一生計配偶者・扶養親族がいる、のいずれかに当たるか。
+pub fn income_adjustment(salary: i64, eligible: bool) -> i64 {
+    if !eligible || salary <= INCOME_ADJUSTMENT_FROM {
+        return 0;
+    }
+    let over = salary.min(INCOME_ADJUSTMENT_SALARY_CAP) - INCOME_ADJUSTMENT_FROM;
+    ceil_div(over * INCOME_ADJUSTMENT_RATE_PCT, 100)
 }
 
 /// 給与所得控除額（収入−給与所得）
@@ -392,6 +409,33 @@ mod tests {
         assert_eq!(life_new_it(60_000, 60_000), 45_000);
         assert_eq!(life_new_it(120_000, 60_000), 60_000);
         assert_eq!(life_new_it(200_000, 60_000), 60_000);
+    }
+
+    #[test]
+    fn salary_net_around_step_table_start() {
+        // 219.1万円未満は 収入 − 74万円
+        assert_eq!(salary_net(2_190_999, Kind::IncomeTax), 1_450_999);
+        // 220万円からは4,000円刻み：220万〜220.4万円未満はすべて 220万 − 74万 = 146万
+        assert_eq!(salary_net(2_200_000, Kind::IncomeTax), 1_460_000);
+        assert_eq!(salary_net(2_200_001, Kind::IncomeTax), 1_460_000);
+        assert_eq!(salary_net(2_203_999, Kind::IncomeTax), 1_460_000);
+        // 220.4万 − (220.4万×30% + 8万) = 1,462,800
+        assert_eq!(salary_net(2_204_000, Kind::IncomeTax), 1_462_800);
+        assert_eq!(salary_net(2_203_999, Kind::Resident), 1_460_000);
+    }
+
+    #[test]
+    fn income_adjustment_boundaries() {
+        assert_eq!(income_adjustment(8_500_000, true), 0);
+        // 1円 × 10% = 0.1 → 切上げで1円
+        assert_eq!(income_adjustment(8_500_001, true), 1);
+        assert_eq!(income_adjustment(8_500_010, true), 1);
+        assert_eq!(income_adjustment(8_500_011, true), 2);
+        assert_eq!(income_adjustment(9_000_000, true), 50_000);
+        // 収入は1,000万円まで
+        assert_eq!(income_adjustment(10_000_000, true), 150_000);
+        assert_eq!(income_adjustment(12_000_000, true), 150_000);
+        assert_eq!(income_adjustment(12_000_000, false), 0);
     }
 
     #[test]
