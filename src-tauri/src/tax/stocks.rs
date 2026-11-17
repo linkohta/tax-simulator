@@ -68,6 +68,29 @@ pub fn is_declared(a: &StockAccount) -> bool {
     }
 }
 
+/// 譲渡損失があり、配当等を受け入れている源泉徴収ありの特定口座か
+fn has_loss_and_dividends(a: &StockAccount) -> bool {
+    a.kind == StockAccountKind::Withholding && a.capital_gain < 0 && a.dividends_received > 0
+}
+
+/// 配当を申告不要にできない組み合わせか。
+/// 源泉徴収ありの特定口座の譲渡損失を申告する場合、その口座に受け入れた配当等も申告しなければならない（措法37条の11の6第10項）
+pub fn requires_dividend_declaration(st: &StockInput) -> bool {
+    st.dividend_mode == DividendMode::NoDeclare && st.accounts.iter().any(|a| a.declare && has_loss_and_dividends(a))
+}
+
+/// 申告しない源泉徴収ありの特定口座の中で、譲渡損失と通算される配当等の額（措法37条の11の6第6項）。
+/// `dividends` は配当等の合計で、口座に受け入れた額の入力がこれを超えていても通算はここまで
+fn in_account_offset(st: &StockInput, dividends: i64) -> i64 {
+    let offset: i64 = st
+        .accounts
+        .iter()
+        .filter(|a| !a.declare && has_loss_and_dividends(a))
+        .map(|a| a.dividends_received.min(-a.capital_gain))
+        .sum();
+    offset.min(dividends)
+}
+
 pub fn stock_income(st: &StockInput) -> StockIncome {
     let mut warnings = Vec::new();
     let amounts = DividendAmounts::from_input(st);
@@ -106,7 +129,8 @@ pub fn stock_income(st: &StockInput) -> StockIncome {
     loss_next += carry;
 
     // 申告不要とした分の源泉徴収。譲渡益は口座ごとに課税され、ほかの口座の損失とは通算されない
-    let mut wh_base = if st.dividend_mode == DividendMode::NoDeclare { dividends } else { 0 };
+    // 配当は、申告しない口座の中で譲渡損失と通算された分を除く
+    let mut wh_base = if st.dividend_mode == DividendMode::NoDeclare { dividends - in_account_offset(st, dividends) } else { 0 };
     let mut wh_it = mul_div(wh_base, STOCK_IT_RATE_X1000, RATE_X1000_DENOM);
     let mut wh_rt = wh_base * STOCK_RT_RATE_PCT / 100;
     for a in st.accounts.iter().filter(|a| !is_declared(a) && a.capital_gain > 0) {
@@ -115,7 +139,14 @@ pub fn stock_income(st: &StockInput) -> StockIncome {
         wh_rt += a.capital_gain * STOCK_RT_RATE_PCT / 100;
     }
     if st.accounts.iter().any(|a| !is_declared(a) && a.capital_gain < 0) {
-        warnings.push("源泉徴収ありの特定口座の損失は、申告しないとほかの口座の利益や配当との損益通算、翌年への繰越ができません。".into());
+        warnings.push("源泉徴収ありの特定口座の損失は、申告しないと、その口座に受け入れた配当等との通算を除いて、ほかの口座の利益や配当との損益通算、翌年への繰越ができません。".into());
+    }
+    if requires_dividend_declaration(st) {
+        warnings.push("源泉徴収ありの特定口座の譲渡損失を申告する場合、その口座に受け入れた配当等も申告が必要です。配当の課税方式を申告分離課税か総合課税にしてください。".into());
+    }
+    let received: i64 = st.accounts.iter().filter(|a| a.kind == StockAccountKind::Withholding).map(|a| a.dividends_received.max(0)).sum();
+    if received > dividends {
+        warnings.push("口座に受け入れた配当等の合計が、配当等の合計を超えています。口座に受け入れた額は、配当等の内数として入力してください。".into());
     }
 
     StockIncome {
@@ -157,7 +188,53 @@ mod tests {
     use super::*;
 
     fn account(kind: StockAccountKind, capital_gain: i64, declare: bool) -> StockAccount {
-        StockAccount { name: String::new(), kind, capital_gain, declare }
+        StockAccount { name: String::new(), kind, capital_gain, declare, dividends_received: 0 }
+    }
+
+    #[test]
+    fn dividends_are_netted_inside_undeclared_account() {
+        let input = |capital_gain: i64, declare: bool, dividends_received: i64, dividend_mode: DividendMode| StockInput {
+            dividends: 300_000,
+            dividend_mode,
+            accounts: vec![StockAccount { dividends_received, ..account(StockAccountKind::Withholding, capital_gain, declare) }],
+            ..Default::default()
+        };
+        // 配当30万のうち20万を受け入れた口座に損失50万：20万が口座内で通算され、残り10万に課税
+        // 10万×15.315% = 15,315、10万×5% = 5,000
+        let s = stock_income(&input(-500_000, false, 200_000, DividendMode::NoDeclare));
+        assert_eq!((s.wh_base, s.wh_it, s.wh_rt), (100_000, 15_315, 5_000));
+        // 損失が受け入れた配当より少なければ、損失の額まで
+        let s = stock_income(&input(-50_000, false, 200_000, DividendMode::NoDeclare));
+        assert_eq!(s.wh_base, 250_000);
+        // 口座に受け入れていなければ通算されない
+        assert_eq!(stock_income(&input(-500_000, false, 0, DividendMode::NoDeclare)).wh_base, 300_000);
+        // 利益の口座では通算はなく、配当と譲渡益の両方に課税
+        assert_eq!(stock_income(&input(100_000, false, 200_000, DividendMode::NoDeclare)).wh_base, 400_000);
+        // 受け入れた額が配当等の合計を超えていても、通算は合計まで（警告も出す）
+        let s = stock_income(&input(-500_000, false, 800_000, DividendMode::NoDeclare));
+        assert_eq!(s.wh_base, 0);
+        assert!(s.warnings.iter().any(|w| w.contains("配当等の合計を超えています")));
+        // 配当を申告する場合は口座内の通算を使わない（申告した配当に課税される）
+        let s = stock_income(&input(-500_000, false, 200_000, DividendMode::Separate));
+        assert_eq!((s.wh_base, s.div_sep), (0, 300_000));
+    }
+
+    #[test]
+    fn declaring_loss_requires_declaring_dividends() {
+        let st = |dividend_mode| StockInput {
+            dividends: 300_000,
+            dividend_mode,
+            accounts: vec![StockAccount { dividends_received: 200_000, ..account(StockAccountKind::Withholding, -500_000, true) }],
+            ..Default::default()
+        };
+        // 損失を申告するのに配当が申告不要：警告し、口座内の通算はしない
+        let s = stock_income(&st(DividendMode::NoDeclare));
+        assert!(requires_dividend_declaration(&st(DividendMode::NoDeclare)));
+        assert!(s.warnings.iter().any(|w| w.contains("配当等も申告が必要")));
+        assert_eq!(s.wh_base, 300_000);
+        // 配当を申告分離にすれば問題ない
+        assert!(!requires_dividend_declaration(&st(DividendMode::Separate)));
+        assert_eq!(stock_income(&st(DividendMode::Separate)).loss_next, 200_000);
     }
 
     #[test]

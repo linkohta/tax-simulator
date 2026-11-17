@@ -107,6 +107,14 @@ export function StockSection({ stocks: st, setStock }: Props) {
                 allowNegative
                 hint="損失はマイナスで入力"
               />
+              {a.kind === "withholding" && (
+                <MoneyInput
+                  label="この口座で受け取った配当等"
+                  value={a.dividendsReceived}
+                  onChange={(dividendsReceived) => updateAccount(i, { dividendsReceived })}
+                  hint="上の配当等のうち、この口座に受け入れている額。申告しなければ、口座内で譲渡損失と通算されます"
+                />
+              )}
             </div>
             {a.kind === "withholding" ? (
               <Check

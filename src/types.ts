@@ -35,6 +35,8 @@ export interface StockAccount {
   kind: StockAccountKind;
   capitalGain: number;
   declare: boolean;
+  /** 源泉徴収ありの特定口座に受け入れた配当等（配当等の合計の内数） */
+  dividendsReceived: number;
 }
 
 /** 旧形式の capitalGain / declareCapitalGain は Rust 側が読込時に accounts へ移すので、ここには持たない */
@@ -239,6 +241,7 @@ export const newStockAccount = (): StockAccount => ({
   kind: "withholding",
   capitalGain: 0,
   declare: false,
+  dividendsReceived: 0,
 });
 
 export const defaultInput =(): TaxInput => ({
