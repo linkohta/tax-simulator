@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::params::{CARE_RATE, CHILDCARE_SUPPORT_RATE, EMPLOYER_SPLIT, KYOKAI_KENPO_FALLBACK_PREFECTURE, KYOKAI_KENPO_RATES, TAX_YEAR};
+use super::params::{
+    CARE_RATE, CHILDCARE_SUPPORT_RATE, EMPLOYER_SPLIT, KYOKAI_KENPO_FALLBACK_PREFECTURE, KYOKAI_KENPO_RATES, TAX_YEAR,
+};
 
 // ───────────────────────────── 入力 ─────────────────────────────
 

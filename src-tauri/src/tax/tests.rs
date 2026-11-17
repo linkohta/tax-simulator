@@ -360,7 +360,10 @@ fn stock_options_with_dividends_received_in_account() {
     assert_eq!(r.summary.total_tax, 90_300 + 240_500);
     // 「配当は申告不要・損失は申告」は選べない組み合わせなので、比較は5通り
     assert_eq!(r.stock_options.len(), 5);
-    assert!(!r.stock_options.iter().any(|o| o.dividend_mode == DividendMode::NoDeclare && o.declare_withholding_accounts == Some(true)));
+    assert!(!r
+        .stock_options
+        .iter()
+        .any(|o| o.dividend_mode == DividendMode::NoDeclare && o.declare_withholding_accounts == Some(true)));
     // 税額は現在と同じだが、申告分離で損失を申告すれば残り20万を翌年に繰り越せるので、そちらが最も有利
     let best = r.stock_options.iter().find(|o| o.is_best).unwrap();
     assert_eq!((best.dividend_mode, best.declare_withholding_accounts), (DividendMode::Separate, Some(true)));

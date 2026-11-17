@@ -10,7 +10,9 @@ struct Target {
 }
 
 static TARGETS: &[Target] = &[
-    Target { label: "iDeCo・小規模企業共済等", remove: |i| i.pension_savings = PensionSavingsInput::default() },
+    Target {
+        label: "iDeCo・小規模企業共済等", remove: |i| i.pension_savings = PensionSavingsInput::default()
+    },
     Target {
         label: "生命保険料控除",
         remove: |i| {
@@ -43,7 +45,12 @@ static TARGETS: &[Target] = &[
 ///
 /// `current` は現在の入力での計算結果。ふるさと納税は `FurusatoResult` で別に示すので対象外。
 /// 1つずつ取り除いて比べるので、各行の合計は全部を同時にやめた場合の差とは一致しない。
-pub fn deduction_savings(input: &TaxInput, furusato_total: i64, one_stop: bool, current: &TaxResult) -> Vec<SavingItem> {
+pub fn deduction_savings(
+    input: &TaxInput,
+    furusato_total: i64,
+    one_stop: bool,
+    current: &TaxResult,
+) -> Vec<SavingItem> {
     TARGETS
         .iter()
         .filter_map(|t| {

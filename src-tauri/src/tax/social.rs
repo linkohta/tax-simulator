@@ -4,12 +4,7 @@ use super::model::{HealthPlan, SocialInsuranceBreakdown, SocialInsuranceInput, S
 use super::params::*;
 
 pub fn standard_monthly_health(monthly: i64) -> i64 {
-    HEALTH_GRADES
-        .iter()
-        .rev()
-        .find(|(_, lower)| monthly >= *lower)
-        .map(|(s, _)| *s)
-        .unwrap_or(HEALTH_GRADES[0].0)
+    HEALTH_GRADES.iter().rev().find(|(_, lower)| monthly >= *lower).map(|(s, _)| *s).unwrap_or(HEALTH_GRADES[0].0)
 }
 
 /// 厚生年金の標準報酬月額（健保と等級境界が共通のため上下限でクランプ）
@@ -126,12 +121,7 @@ pub fn estimate(input: &SocialInsuranceInput, age: u32) -> SocialInsuranceBreakd
     let employment = if input.employment_insurance {
         // 月ごと・賞与ごとに端数処理
         employment_share(monthly, EMPLOYMENT_RATE) * 12
-            + input
-                .bonuses
-                .iter()
-                .filter(|b| **b > 0)
-                .map(|&b| employment_share(b, EMPLOYMENT_RATE))
-                .sum::<i64>()
+            + input.bonuses.iter().filter(|b| **b > 0).map(|&b| employment_share(b, EMPLOYMENT_RATE)).sum::<i64>()
     } else {
         0
     };
@@ -244,7 +234,8 @@ mod tests {
 
     #[test]
     fn bonus_caps() {
-        let input = SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![3_000_000, 3_000_000], ..Default::default() };
+        let input =
+            SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![3_000_000, 3_000_000], ..Default::default() };
         let s = estimate(&input, 35);
         // 健保：標準賞与額は年度累計573万円まで。1回目 300万×4.925% = 147,750、
         //       2回目は残り273万×4.925% = 134,452.5 → 50銭以下切捨てで 134,452
@@ -255,7 +246,9 @@ mod tests {
         assert_eq!(s.employment, 1_500 * 12 + 15_000 * 2);
 
         // 上限ちょうどと1,000円超
-        let one = |b: i64| estimate(&SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![b], ..Default::default() }, 35);
+        let one = |b: i64| {
+            estimate(&SocialInsuranceInput { monthly_salary: 300_000, bonuses: vec![b], ..Default::default() }, 35)
+        };
         assert_eq!(one(1_500_000).pension, one(1_501_000).pension);
         assert_eq!(one(5_730_000).health, one(5_731_000).health);
         // 標準賞与額は1,000円未満切捨て

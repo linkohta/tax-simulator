@@ -130,7 +130,8 @@ pub fn stock_income(st: &StockInput) -> StockIncome {
 
     // 申告不要とした分の源泉徴収。譲渡益は口座ごとに課税され、ほかの口座の損失とは通算されない
     // 配当は、申告しない口座の中で譲渡損失と通算された分を除く
-    let mut wh_base = if st.dividend_mode == DividendMode::NoDeclare { dividends - in_account_offset(st, dividends) } else { 0 };
+    let mut wh_base =
+        if st.dividend_mode == DividendMode::NoDeclare { dividends - in_account_offset(st, dividends) } else { 0 };
     let mut wh_it = mul_div(wh_base, STOCK_IT_RATE_X1000, RATE_X1000_DENOM);
     let mut wh_rt = wh_base * STOCK_RT_RATE_PCT / 100;
     for a in st.accounts.iter().filter(|a| !is_declared(a) && a.capital_gain > 0) {
@@ -144,7 +145,12 @@ pub fn stock_income(st: &StockInput) -> StockIncome {
     if requires_dividend_declaration(st) {
         warnings.push("源泉徴収ありの特定口座の譲渡損失を申告する場合、その口座に受け入れた配当等も申告が必要です。配当の課税方式を申告分離課税か総合課税にしてください。".into());
     }
-    let received: i64 = st.accounts.iter().filter(|a| a.kind == StockAccountKind::Withholding).map(|a| a.dividends_received.max(0)).sum();
+    let received: i64 = st
+        .accounts
+        .iter()
+        .filter(|a| a.kind == StockAccountKind::Withholding)
+        .map(|a| a.dividends_received.max(0))
+        .sum();
     if received > dividends {
         warnings.push("口座に受け入れた配当等の合計が、配当等の合計を超えています。口座に受け入れた額は、配当等の内数として入力してください。".into());
     }
@@ -193,12 +199,16 @@ mod tests {
 
     #[test]
     fn dividends_are_netted_inside_undeclared_account() {
-        let input = |capital_gain: i64, declare: bool, dividends_received: i64, dividend_mode: DividendMode| StockInput {
-            dividends: 300_000,
-            dividend_mode,
-            accounts: vec![StockAccount { dividends_received, ..account(StockAccountKind::Withholding, capital_gain, declare) }],
-            ..Default::default()
-        };
+        let input =
+            |capital_gain: i64, declare: bool, dividends_received: i64, dividend_mode: DividendMode| StockInput {
+                dividends: 300_000,
+                dividend_mode,
+                accounts: vec![StockAccount {
+                    dividends_received,
+                    ..account(StockAccountKind::Withholding, capital_gain, declare)
+                }],
+                ..Default::default()
+            };
         // 配当30万のうち20万を受け入れた口座に損失50万：20万が口座内で通算され、残り10万に課税
         // 10万×15.315% = 15,315、10万×5% = 5,000
         let s = stock_income(&input(-500_000, false, 200_000, DividendMode::NoDeclare));
@@ -224,7 +234,10 @@ mod tests {
         let st = |dividend_mode| StockInput {
             dividends: 300_000,
             dividend_mode,
-            accounts: vec![StockAccount { dividends_received: 200_000, ..account(StockAccountKind::Withholding, -500_000, true) }],
+            accounts: vec![StockAccount {
+                dividends_received: 200_000,
+                ..account(StockAccountKind::Withholding, -500_000, true)
+            }],
             ..Default::default()
         };
         // 損失を申告するのに配当が申告不要：警告し、口座内の通算はしない
@@ -247,7 +260,9 @@ mod tests {
         assert_eq!(dividend_credit(&d(0, 0, 200_000, 0), t, &DIVIDEND_CREDIT_IT), 5_000);
         assert_eq!(dividend_credit(&d(0, 0, 0, 200_000), t, &DIVIDEND_CREDIT_IT), 0);
         // 住民税（市町村＋道府県）：2.8% / 1.4% / 0.7%
-        let rt = |x: &DividendAmounts| dividend_credit(x, t, &DIVIDEND_CREDIT_RT_MUNI) + dividend_credit(x, t, &DIVIDEND_CREDIT_RT_PREF);
+        let rt = |x: &DividendAmounts| {
+            dividend_credit(x, t, &DIVIDEND_CREDIT_RT_MUNI) + dividend_credit(x, t, &DIVIDEND_CREDIT_RT_PREF)
+        };
         assert_eq!(rt(&d(200_000, 0, 0, 0)), 5_600);
         assert_eq!(rt(&d(0, 200_000, 0, 0)), 2_800);
         assert_eq!(rt(&d(0, 0, 200_000, 0)), 1_400);

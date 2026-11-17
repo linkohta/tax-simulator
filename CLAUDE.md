@@ -16,13 +16,14 @@
 npm run app:dev                   # アプリ起動（Vite + Rust）。npm run dev は Vite のみで計算できない
 cd src-tauri && cargo test --lib  # 計算エンジンのテスト
 cd src-tauri && cargo clippy --all-targets -- -D warnings  # lint（CI でも実行）
+cd src-tauri && cargo fmt         # 整形（1行120字まで。設定は src-tauri/rustfmt.toml、CI は cargo fmt --check）
 npx tsc --noEmit                  # フロントの型チェック
 npm run build                     # フロントのビルド
 npm run tauri android dev         # Android 実機・エミュレータで起動
 npm run tauri android build -- --aab  # Google Play 用 AAB
 ```
 
-変更後は少なくとも `cargo test --lib`、`cargo clippy --all-targets -- -D warnings`、`npx tsc --noEmit` を通すこと（CI でも同じものを回している）。
+変更後は少なくとも `cargo fmt`、`cargo test --lib`、`cargo clippy --all-targets -- -D warnings`、`npx tsc --noEmit` を通すこと（CI でも同じものを回している）。
 
 ## 機能
 

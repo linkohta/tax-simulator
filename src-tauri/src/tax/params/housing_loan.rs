@@ -99,4 +99,3 @@ pub struct HousingLoanResidentLimit {
 pub const HOUSING_LOAN_RT_STANDARD: HousingLoanResidentLimit = HousingLoanResidentLimit { rate_pct: 5, cap: 97_500 };
 /// 平成26年4月〜令和3年12月入居で消費税率8%・10%の特定取得など：7%・136,500円（同条）
 pub const HOUSING_LOAN_RT_SPECIFIC: HousingLoanResidentLimit = HousingLoanResidentLimit { rate_pct: 7, cap: 136_500 };
-
