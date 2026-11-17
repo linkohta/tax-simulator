@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # 依存の脆弱性を週1回確認する（月曜 9:00 JST）
+    - cron: "0 0 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: テストと型チェック
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: フロントの依存を入れる
+        run: npm ci
+
+      # tsc の型チェックと Vite のビルド。Rust 側の generate_context! が dist/ を参照するので先に作る
+      - name: フロントの型チェックとビルド
+        run: npm run build
+
+      - name: Tauri のビルドに必要なパッケージを入れる
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # CLAUDE.md のルール：cargo build / cargo test で warning を出さない
+      - name: 計算エンジンのテスト
+        working-directory: src-tauri
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo test --lib
+
+  audit:
+    name: 依存の脆弱性
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit
+        working-directory: src-tauri
+        run: cargo audit
