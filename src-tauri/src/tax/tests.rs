@@ -328,6 +328,7 @@ fn stock_options_include_declaring_withholding_accounts() {
         kind: StockAccountKind::Withholding,
         capital_gain: -500_000,
         declare: false,
+        dividends_received: 0,
     }];
     let r = calculate(&input);
     // 配当3方式 × 口座を申告する/しない
@@ -339,6 +340,31 @@ fn stock_options_include_declaring_withholding_accounts() {
     assert_eq!(best.total_tax, 90_300 + 240_500);
     assert_eq!(best.loss_carried_to_next_year, 200_000);
     assert_eq!(r.stock_options.iter().filter(|o| o.is_current).count(), 1);
+}
+
+#[test]
+fn stock_options_with_dividends_received_in_account() {
+    // 配当30万をすべて、損失50万の源泉徴収ありの特定口座で受け取っている
+    let mut input = single(5_000_000, 750_000);
+    input.stocks.dividends = 300_000;
+    input.stocks.accounts = vec![StockAccount {
+        name: "A証券".into(),
+        kind: StockAccountKind::Withholding,
+        capital_gain: -500_000,
+        declare: false,
+        dividends_received: 300_000,
+    }];
+    let r = calculate(&input);
+    // 何も申告しなくても口座内で通算され、株式の税はかからない
+    assert_eq!(r.summary.stock_withholding, 0);
+    assert_eq!(r.summary.total_tax, 90_300 + 240_500);
+    // 「配当は申告不要・損失は申告」は選べない組み合わせなので、比較は5通り
+    assert_eq!(r.stock_options.len(), 5);
+    assert!(!r.stock_options.iter().any(|o| o.dividend_mode == DividendMode::NoDeclare && o.declare_withholding_accounts == Some(true)));
+    // 税額は現在と同じだが、申告分離で損失を申告すれば残り20万を翌年に繰り越せるので、そちらが最も有利
+    let best = r.stock_options.iter().find(|o| o.is_best).unwrap();
+    assert_eq!((best.dividend_mode, best.declare_withholding_accounts), (DividendMode::Separate, Some(true)));
+    assert_eq!((best.diff_from_current, best.loss_carried_to_next_year), (0, 200_000));
 }
 
 #[test]

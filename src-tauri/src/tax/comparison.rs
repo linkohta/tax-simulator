@@ -2,7 +2,7 @@
 
 use super::compute;
 use super::model::*;
-use super::stocks::DividendAmounts;
+use super::stocks::{requires_dividend_declaration, DividendAmounts};
 
 const DIVIDEND_MODES: [DividendMode; 3] = [DividendMode::NoDeclare, DividendMode::Comprehensive, DividendMode::Separate];
 
@@ -29,6 +29,10 @@ pub fn stock_options(input: &TaxInput, furusato_total: i64, one_stop: bool, curr
                 for a in variant.stocks.accounts.iter_mut().filter(|a| a.kind == StockAccountKind::Withholding) {
                     a.declare = d;
                 }
+            }
+            // 法令上選べない組み合わせ（損失を申告するのに、その口座の配当を申告しない）は比べない
+            if requires_dividend_declaration(&variant.stocks) {
+                continue;
             }
             let r = compute(&variant, furusato_total, one_stop).result;
             let same_declare = declare.is_none_or(|d| st.accounts.iter().filter(choosable).all(|a| a.declare == d));

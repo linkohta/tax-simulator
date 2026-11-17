@@ -267,6 +267,9 @@ pub struct StockAccount {
     pub capital_gain: i64,
     /// 源泉徴収ありの特定口座の損益を申告する（ほかの種類の口座では使わない）
     pub declare: bool,
+    /// 源泉徴収ありの特定口座に受け入れた配当等（`StockInput` の配当等の内数）。
+    /// 申告しなければ、口座内で譲渡損失と通算される
+    pub dividends_received: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -311,6 +314,7 @@ impl TaxInput {
                 kind: StockAccountKind::Withholding,
                 capital_gain: st.capital_gain,
                 declare: st.declare_capital_gain,
+                dividends_received: 0,
             });
             st.capital_gain = 0;
             st.declare_capital_gain = false;
