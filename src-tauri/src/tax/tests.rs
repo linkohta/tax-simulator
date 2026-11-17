@@ -390,6 +390,28 @@ fn housing_loan_spills_over_to_resident_tax() {
 }
 
 #[test]
+fn housing_loan_auto_calculation() {
+    // 2026年入居・ZEH水準の新築・年末残高3,000万：3,000万 × 0.7% = 210,000
+    let mut input = single(5_000_000, 750_000);
+    input.housing_loan = HousingLoanInput {
+        mode: HousingLoanMode::Auto,
+        year_end_balance: 30_000_000,
+        move_in_year: 2026,
+        housing_type: HousingType::Zeh,
+        ..Default::default()
+    };
+    let r = calculate(&input);
+    // 所得税 88,500 を全額控除 → 残り 121,500
+    assert_eq!(r.income_tax.total, 0);
+    // 住民税の限度額：2026年入居なので基礎控除の超過分を加算せず、課税総所得 177万 × 5% = 88,500
+    // 所得割 235,500 − 88,500 = 147,000
+    assert_eq!(r.resident_tax.income_levy, 147_000);
+    // 手入力の欄に値が残っていても、自動計算では使わない
+    input.housing_loan.credit_amount = 999_999;
+    assert_eq!(calculate(&input).resident_tax.income_levy, 147_000);
+}
+
+#[test]
 fn minimum_tax_warning_threshold() {
     // 給与所得 = 収入 − 195万。基準所得金額 3.3億円ちょうどでは警告しない
     let warned = |salary: i64| calculate(&single(salary, 0)).warnings.iter().any(|w| w.contains("負担の適正化措置"));

@@ -183,7 +183,8 @@ fn compute(input: &TaxInput, furusato_total: i64, one_stop_requested: bool) -> C
         credits_it.push(DeductionItem { label: "配当控除".into(), amount: div_credit_it });
     }
     // 住宅借入金等特別控除
-    let hl_total = input.housing_loan.credit_amount.max(0);
+    let (hl_total, hl_warnings) = housing_loan::credit(&input.housing_loan, total_income_it);
+    warnings.extend(hl_warnings);
     let hl_it = hl_total.min(tax_it);
     if hl_it > 0 {
         tax_it -= hl_it;
