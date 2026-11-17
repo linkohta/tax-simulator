@@ -329,7 +329,7 @@ pub fn medical(m: &MedicalInput, total_income_base: i64) -> i64 {
     match m.mode {
         MedicalMode::Normal => {
             let net = (m.expenses - m.reimbursed).max(0);
-            let threshold = (total_income_base * MEDICAL_THRESHOLD_INCOME_PCT / 100).min(MEDICAL_THRESHOLD).max(0);
+            let threshold = (total_income_base * MEDICAL_THRESHOLD_INCOME_PCT / 100).clamp(0, MEDICAL_THRESHOLD);
             (net - threshold).clamp(0, MEDICAL_CAP)
         }
         MedicalMode::SelfMedication => (m.otc_purchases - SELF_MEDICATION_THRESHOLD).clamp(0, SELF_MEDICATION_CAP),

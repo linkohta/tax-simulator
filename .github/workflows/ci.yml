@@ -40,10 +40,16 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       # CLAUDE.md のルール：cargo build / cargo test で warning を出さない
       - name: 計算エンジンのテスト

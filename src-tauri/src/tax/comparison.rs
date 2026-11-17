@@ -31,7 +31,7 @@ pub fn stock_options(input: &TaxInput, furusato_total: i64, one_stop: bool, curr
                 }
             }
             let r = compute(&variant, furusato_total, one_stop).result;
-            let same_declare = declare.map_or(true, |d| st.accounts.iter().filter(choosable).all(|a| a.declare == d));
+            let same_declare = declare.is_none_or(|d| st.accounts.iter().filter(choosable).all(|a| a.declare == d));
             options.push(StockOption {
                 dividend_mode: mode,
                 declare_withholding_accounts: declare,
