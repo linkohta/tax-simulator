@@ -1,6 +1,9 @@
+import { lazy, Suspense } from "react";
 import { CurvePoint, DeductionItem, DividendMode, StockOption, TaxResult } from "../types";
 import { yen } from "./Fields";
-import { IncomeChart } from "./IncomeChart";
+
+// グラフ（Recharts）は大きいので別のチャンクに分け、最初の表示のあとで読み込む
+const IncomeChart = lazy(() => import("./IncomeChart").then((m) => ({ default: m.IncomeChart })));
 
 const pct = (n: number) => `${n.toFixed(2)}%`;
 
@@ -245,7 +248,9 @@ export function ResultPanel({ result, curve, currentSalary }: Props) {
         </details>
       )}
 
-      <IncomeChart curve={curve} currentSalary={currentSalary} />
+      <Suspense fallback={null}>
+        <IncomeChart curve={curve} currentSalary={currentSalary} />
+      </Suspense>
 
       {result.savings.length > 0 && (
         <details open>
