@@ -72,7 +72,14 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: npm audit
+      # アプリに入る依存（dependencies）で判定する
+      - name: npm audit（本番の依存）
+        run: npm audit --omit=dev --audit-level=high
+
+      # ビルド時だけに使う依存（vite など）は結果を出すだけで、失敗にはしない。
+      # 修正版が未公開の脆弱性（picomatch の GHSA-fc5q-39xc-vjpf など）で CI が止まるのを避けるため
+      - name: npm audit（開発用の依存を含む、参考）
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - uses: taiki-e/install-action@v2
